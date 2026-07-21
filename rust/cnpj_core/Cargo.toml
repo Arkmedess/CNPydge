@@ -1,0 +1,38 @@
+[package]
+name = "cnpj_core"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "cnpj_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
+memmap2 = "0.9"
+crossbeam = "0.8"
+crossbeam-channel = "0.5"
+memchr = "2.7"
+csv-core = "0.1"
+simdutf8 = "0.1"
+thiserror = "2.0"
+tracing = "0.1"
+# Habilitar quando entrar a Fase 3 do roadmap (ver docs/README dos skills: apache-arrow)
+# arrow = "53"
+# Habilitar quando entrar a Fase 8 (ver skill: postgres-copy-binary)
+# tokio-postgres = "0.7"
+# duckdb = { version = "1", features = ["bundled"] }
+
+[dev-dependencies]
+criterion = "0.5"
+proptest = "1.5"
+
+[[bench]]
+name = "parser_bench"
+harness = false
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+opt-level = 3

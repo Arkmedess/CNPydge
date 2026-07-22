@@ -28,7 +28,9 @@ ENV/
 
 # Rust
 /target/
+rust/cnpj_core/target/
 *.rs.bk
+Cargo.lock
 
 # IDE
 .vscode/

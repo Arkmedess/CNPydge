@@ -17,15 +17,15 @@ csv-core = "0.1"
 simdutf8 = "0.1"
 thiserror = "2.0"
 tracing = "0.1"
+postgres = "0.19"
 # Habilitar quando entrar a Fase 3 do roadmap (ver docs/README dos skills: apache-arrow)
 # arrow = "53"
-# Habilitar quando entrar a Fase 8 (ver skill: postgres-copy-binary)
-# tokio-postgres = "0.7"
 # duckdb = { version = "1", features = ["bundled"] }
 
 [dev-dependencies]
 criterion = "0.5"
 proptest = "1.5"
+tempfile = "3"
 
 [[bench]]
 name = "parser_bench"

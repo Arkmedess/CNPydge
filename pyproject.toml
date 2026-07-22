@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.7", "mypy>=1.13"]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.7", "mypy>=1.13", "maturin>=1.7"]
 
 [project.scripts]
 cnpj-importer = "python.cli.main:app"
@@ -26,6 +26,9 @@ cnpj-importer = "python.cli.main:app"
 [build-system]
 requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["python*"]
 
 [tool.ruff]
 line-length = 100

@@ -2,6 +2,7 @@
 
 Somente leitura -- nunca aciona o pipeline de importacao via HTTP.
 """
+
 from fastapi import FastAPI
 
 app = FastAPI(title="CNPJ Ultra Importer API")

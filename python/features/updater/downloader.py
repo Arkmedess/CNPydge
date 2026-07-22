@@ -10,7 +10,6 @@ Ver skills: python-orchestration, security-audit.
 """
 
 import hashlib
-import shutil
 from pathlib import Path
 
 import httpx
@@ -97,9 +96,7 @@ async def download_file(
         if expected_sha256:
             actual = compute_sha256(dest_path)
             if actual != expected_sha256:
-                logger.warning(
-                    "SHA256 mismatch for {}, re-downloading", filename
-                )
+                logger.warning("SHA256 mismatch for {}, re-downloading", filename)
             else:
                 logger.info("Already cached: {}", filename)
                 return dest_path
@@ -122,8 +119,7 @@ async def download_file(
         if actual != expected_sha256:
             dest_path.unlink()  # Remove corrupted file
             raise ValueError(
-                f"SHA256 mismatch for {filename}: "
-                f"expected {expected_sha256}, got {actual}"
+                f"SHA256 mismatch for {filename}: expected {expected_sha256}, got {actual}"
             )
 
     logger.info("Downloaded: {}", filename)

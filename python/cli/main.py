@@ -4,6 +4,7 @@ Comandos previstos: importar, atualizar, bench, serve.
 Nunca implementar aqui logica de parsing/normalizacao de registros -- isso e
 delegado ao modulo Rust `cnpj_core` via PyO3 (ver skill: pyo3-bridge).
 """
+
 import typer
 
 app = typer.Typer(help="CNPJ Ultra Importer")

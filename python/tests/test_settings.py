@@ -1,4 +1,5 @@
 """Ver skill: test-generator."""
+
 from python.config.settings import Settings
 
 

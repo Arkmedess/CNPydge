@@ -36,7 +36,9 @@ def importar(
     postgres_dsn = dsn or settings.postgres_dsn.get_secret_value()
 
     logger.info("Iniciando importacao CNPJ...")
-    logger.info("PostgreSQL: {}", postgres_dsn.split("@")[-1] if "@" in postgres_dsn else postgres_dsn)
+    logger.info(
+        "PostgreSQL: {}", postgres_dsn.split("@")[-1] if "@" in postgres_dsn else postgres_dsn
+    )
     logger.info("Batch size: {}", batch_size)
 
     # Step 1: Download files
@@ -47,13 +49,12 @@ def importar(
         filenames = files
     else:
         from python.features.updater.downloader import RFB_FILES
+
         filenames = RFB_FILES
 
     logger.info("Baixando {} arquivos...", len(filenames))
 
-    downloaded = asyncio.run(
-        _download_files(download_dir, filenames)
-    )
+    downloaded = asyncio.run(_download_files(download_dir, filenames))
 
     if not downloaded:
         logger.error("Nenhum arquivo baixado. Abortando.")
@@ -66,8 +67,7 @@ def importar(
         import cnpj_core
     except ImportError:
         logger.error(
-            "Modulo Rust 'cnpj_core' nao encontrado. "
-            "Execute 'maturin develop --release' primeiro."
+            "Modulo Rust 'cnpj_core' nao encontrado. Execute 'maturin develop --release' primeiro."
         )
         raise typer.Exit(1)
 
@@ -145,7 +145,9 @@ async def _extract_zips(zip_files: list[Path], dest_dir: Path) -> list[str]:
             # Security: check for zip bomb
             total_size = sum(info.file_size for info in zf.infolist())
             if total_size > 10 * 1024 * 1024 * 1024:  # 10GB limit
-                logger.error("Possivel zip bomb detectado em {}: {} bytes", zip_path.name, total_size)
+                logger.error(
+                    "Possivel zip bomb detectado em {}: {} bytes", zip_path.name, total_size
+                )
                 continue
 
             zf.extractall(dest_dir)

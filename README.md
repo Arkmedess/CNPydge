@@ -54,18 +54,14 @@ CNPydge/
 └── .mimocode/             # skills e agentes do MiMo Code
 ```
 
-> **Nota**: diretorios legados (`python/api/`, `python/cli/`, `python/dashboard/`,
-> `python/updater/`, `python/benchmark/`) existem para compatibilidade e serao migrados.
-> Novas features devem seguir a estrutura acima. Ver `docs/ARCHITECTURE.md` para detalhes.
-
 ## Setup rapido
 
 ```bash
 ./scripts/bootstrap.sh
 ```
 
-Requer Python 3.14 e Rust (rustup). O script cria o virtualenv, instala dependencias,
-builda a extensao Rust via maturin e roda os testes.
+Requer uv (https://docs.astral.sh/uv/) e Rust (rustup). O script sincroniza
+dependencias com `uv sync`, builda a extensao Rust via maturin e roda os testes.
 
 ## Roadmap
 

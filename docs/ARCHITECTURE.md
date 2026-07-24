@@ -46,19 +46,10 @@ CNPydge/
 └── .mimocode/               # skills e agentes do MiMo Code
 ```
 
-## Estrutura atual (com legado)
+## Estrutura atual
 
-O repositorio contem codigo legado que sera migrado gradualmente:
-
-| Diretorio legado | Destino na arquitetura nova | Status |
-|---|---|---|
-| `python/api/` | `python/entrypoints/api.py` | Legado -- migrar |
-| `python/cli/` | `python/entrypoints/cli.py` | Legado -- migrar |
-| `python/dashboard/` | `python/entrypoints/dashboard.py` | Legado -- migrar |
-| `python/updater/` | `python/features/updater/` | Legado -- migrar |
-| `python/benchmark/` | `python/features/benchmark/` | Legado -- migrar |
-
-**Regra**: nao adicionar funcionalidade nova nos diretorios legados. Novas features vao para a estrutura alvo.
+O repositorio segue a estrutura alvo. Codigo legado (`python/api/`, `python/cli/`,
+`python/dashboard/`, `python/updater/`, `python/benchmark/`) foi removido.
 
 ## Principios de organizacao
 

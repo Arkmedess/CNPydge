@@ -21,7 +21,7 @@ dependencies = [
 dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.7", "mypy>=1.13", "maturin>=1.7"]
 
 [project.scripts]
-cnpj-importer = "python.cli.main:app"
+cnpj-importer = "python.entrypoints.cli:app"
 
 [build-system]
 requires = ["setuptools>=75"]

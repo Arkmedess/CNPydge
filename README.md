@@ -141,7 +141,7 @@ Ver `.mimocode/skills/core/planning/SKILL.md` para detalhes de cada fase.
 
 ### Formato dos dados
 
-- `docs/formato-rfb/README.md` -- Leiaute dos arquivos da Receita Federal
+- `docs/formato-rfb/README.md` -- Layout dos arquivos da Receita Federal
 
 ## Performance
 
@@ -153,15 +153,6 @@ Ver `.mimocode/skills/core/planning/SKILL.md` para detalhes de cada fase.
 | Arquivos processados | 36 ZIPs (~50GB) |
 
 Ver `docs/benchmarks/README.md` para resultados históricos.
-
-## Agentes e skills
-
-Este projeto usa o formato **MiMo Code** (`.mimocode/`):
-
-- `skills/**/SKILL.md` -- Doutrina de engenharia carregada sob demanda
-- `agents/*.md` -- Subagentes especializados (arquiteto, rust builder, orquestrador python, etc.)
-
-Ver `AGENTS.md` para a lista completa de agentes.
 
 ## Licença
 

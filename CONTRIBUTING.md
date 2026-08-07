@@ -18,7 +18,7 @@ O projeto usa **Python 3.14** para orquestração e **Rust** para o hot path (vi
 
 ```bash
 # 1. Clonar o repositório
-git clone https://github.com/seu-usuario/CNPydge.git
+git clone https://github.com/Arkmedess/CNPydge.git
 cd CNPydge
 
 # 2. Executar bootstrap (instala dependências + build Rust)
@@ -48,15 +48,15 @@ CNPydge/
 
 ### 1. Commits
 
-Use **Conventional Commits** para rastreabilidade:
+Use **Conventional Commits** em inglês para rastreabilidade:
 
 ```
-feat: adicionar suporte a exportação Parquet
-fix: corrigir parsing de CNPJ alfanumérico
-docs: atualizar README do módulo Rust
-refactor: extrair lógica de download para módulo separado
-test: adicionar testes para normalização
-perf: otimizar busca de delimitador com SIMD
+feat: add parquet export support
+fix: fix parsing of alphanumeric CNPJ
+docs: update Rust module README
+refactor: extract download logic to separate module
+test: add normalization tests
+perf: optimize delimiter search with SIMD
 ```
 
 ### 2. Branches
@@ -69,7 +69,7 @@ perf: otimizar busca de delimitador com SIMD
 ### 3. Pull Requests
 
 1. Crie uma branch a partir de `main`
-2. Implemente sua mudança
+2. Implemente a sua mudança
 3. Adicione testes se aplicável
 4. Atualize a documentação se necessário
 5. Abra um PR com título claro e descrição detalhada
@@ -119,7 +119,7 @@ cargo bench
 
 ### 5. Documentação
 
-- **Português**: Toda documentação e commits em português (projeto focado em dados brasileiros)
+- **Português**: A documentação deve ser em português e os commits no padrão inglês (projeto focado em dados brasileiros)
 - **ADRs**: Decisões de arquitetura devem ser documentadas em `docs/adr/`
 - **READMEs**: Cada módulo deve ter um README com responsabilidade, uso e testes
 

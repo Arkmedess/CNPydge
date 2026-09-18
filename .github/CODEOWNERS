@@ -1,0 +1,18 @@
+# Donos padrão para todo o repositório
+
+* @Arkmedess
+
+
+## Núcleo nativo em Rust
+
+/engine/ @Arkmedess
+
+
+## Pacote de orquestração em Python
+
+/orchestrator/ @Arkmedess
+
+
+## Pipelines e governança do repositório
+
+/.github/ @Arkmedess

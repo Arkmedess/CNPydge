@@ -1,0 +1,16 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "cnpydge"
+version = "0.1.0"
+description = "Motor em Rust de alta performance com orquestração em Python para dados públicos de CNPJ"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+[tool.maturin]
+manifest-path = "engine/Cargo.toml"
+module-name = "cnpydge._core"
+python-source = "orchestrator"

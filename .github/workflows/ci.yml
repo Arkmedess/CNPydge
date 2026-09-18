@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-format:
+    name: Lint & Formatação
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Configurar Python 3.13
+        run: uv python install 3.13
+
+      - name: Verificar formatação Rust (rustfmt)
+        run: cargo fmt --all --check
+
+      - name: Análise estática Rust (clippy)
+        run: uv run cargo clippy --all-targets -- -D warnings
+
+  test:
+    name: Testes Automatizados
+    needs: lint-format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Configurar Python 3.13
+        run: uv python install 3.13
+
+      - name: Executar testes em Rust
+        run: uv run cargo test --all-targets
+
+  build:
+    name: Build & Smoke Test
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Configurar Python 3.13
+        run: uv python install 3.13
+
+      - name: Compilar pacote nativo via maturin
+        run: uv run --with maturin maturin build --release
+
+      - name: Teste de fumaça (importação do módulo compilado)
+        run: |
+          uv run --with maturin maturin develop --release
+          uv run python -c "import cnpydge; print('CNPydge importado com sucesso na versão:', cnpydge.version())"
+

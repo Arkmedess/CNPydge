@@ -1,0 +1,12 @@
+services:
+  cnpydge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cnpydge:latest
+    container_name: cnpydge-pipeline
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data
+

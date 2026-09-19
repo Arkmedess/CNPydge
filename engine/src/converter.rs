@@ -1,5 +1,6 @@
 //! Conversor colunar unificado de alta vazão para Apache Parquet.
 
+use crate::dominio::Dominio;
 use crate::empresa::Empresa;
 use crate::estabelecimento::Estabelecimento;
 use crate::reader::MmapReader;
@@ -38,6 +39,12 @@ pub enum TableKind {
     Socios,
     Estabelecimentos,
     Simples,
+    Cnaes,
+    Motivos,
+    Municipios,
+    Naturezas,
+    Paises,
+    Qualificacoes,
 }
 
 impl TableKind {
@@ -48,6 +55,12 @@ impl TableKind {
             "socios" | "socio" => Ok(Self::Socios),
             "estabelecimentos" | "estabelecimento" => Ok(Self::Estabelecimentos),
             "simples" | "simples_nacional" | "mei" => Ok(Self::Simples),
+            "cnaes" | "cnae" => Ok(Self::Cnaes),
+            "motivos" | "motivo" => Ok(Self::Motivos),
+            "municipios" | "municipio" => Ok(Self::Municipios),
+            "naturezas" | "natureza" => Ok(Self::Naturezas),
+            "paises" | "pais" => Ok(Self::Paises),
+            "qualificacoes" | "qualificacao" => Ok(Self::Qualificacoes),
             _ => Err(ConvertErr::UnsupportedTable(s.to_string())),
         }
     }
@@ -118,6 +131,18 @@ impl TableKind {
                 Field::new("data_opcao_mei", DataType::UInt32, true),
                 Field::new("data_exclusao_mei", DataType::UInt32, true),
             ])),
+            Self::Cnaes => Arc::new(Schema::new(vec![
+                Field::new("codigo", DataType::UInt32, false),
+                Field::new("descricao", DataType::Utf8, false),
+            ])),
+            Self::Motivos
+            | Self::Municipios
+            | Self::Naturezas
+            | Self::Paises
+            | Self::Qualificacoes => Arc::new(Schema::new(vec![
+                Field::new("codigo", DataType::UInt16, false),
+                Field::new("descricao", DataType::Utf8, false),
+            ])),
         }
     }
 
@@ -128,6 +153,12 @@ impl TableKind {
             Self::Socios => build_socios(slice, &self.schema()),
             Self::Estabelecimentos => build_estabelecimentos(slice, &self.schema()),
             Self::Simples => build_simples(slice, &self.schema()),
+            Self::Cnaes => build_dominio_u32(slice, &self.schema()),
+            Self::Motivos
+            | Self::Municipios
+            | Self::Naturezas
+            | Self::Paises
+            | Self::Qualificacoes => build_dominio_u16(slice, &self.schema()),
         }
     }
 }
@@ -495,6 +526,68 @@ fn build_simples(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>
     Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
 }
 
+fn build_dominio_u32(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
+    let mut cod_b = UInt32Builder::new();
+    let mut desc_b = StringBuilder::new();
+
+    let mut row_count = 0;
+    for line in slice.split(|&b| b == b'\n') {
+        let line = if line.ends_with(b"\r") {
+            &line[..line.len() - 1]
+        } else {
+            line
+        };
+        if line.is_empty() {
+            continue;
+        }
+
+        let Ok(dom) = Dominio::<u32>::parse_line(line) else {
+            continue;
+        };
+        cod_b.append_value(dom.codigo);
+        desc_b.append_value(dom.descricao);
+        row_count += 1;
+    }
+
+    if row_count == 0 {
+        return Ok(None);
+    }
+
+    let columns: Vec<ArrayRef> = vec![Arc::new(cod_b.finish()), Arc::new(desc_b.finish())];
+    Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
+}
+
+fn build_dominio_u16(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
+    let mut cod_b = UInt16Builder::new();
+    let mut desc_b = StringBuilder::new();
+
+    let mut row_count = 0;
+    for line in slice.split(|&b| b == b'\n') {
+        let line = if line.ends_with(b"\r") {
+            &line[..line.len() - 1]
+        } else {
+            line
+        };
+        if line.is_empty() {
+            continue;
+        }
+
+        let Ok(dom) = Dominio::<u16>::parse_line(line) else {
+            continue;
+        };
+        cod_b.append_value(dom.codigo);
+        desc_b.append_value(dom.descricao);
+        row_count += 1;
+    }
+
+    if row_count == 0 {
+        return Ok(None);
+    }
+
+    let columns: Vec<ArrayRef> = vec![Arc::new(cod_b.finish()), Arc::new(desc_b.finish())];
+    Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
+}
+
 #[inline]
 fn append_opt_str(b: &mut StringBuilder, val: Option<&str>) {
     match val {
@@ -605,6 +698,44 @@ mod tests {
         drop(file);
 
         let rows: usize = to_parquet(&csv, &parquet, TableKind::Simples).expect("Convert");
+        assert_eq!(rows, 1);
+        assert!(parquet.exists());
+
+        let _ = std::fs::remove_file(csv);
+        let _ = std::fs::remove_file(parquet);
+    }
+
+    #[test]
+    fn test_unified_to_parquet_cnaes() {
+        let temp_dir: std::path::PathBuf = std::env::temp_dir();
+        let csv: std::path::PathBuf = temp_dir.join("test_unified_cnaes.csv");
+        let parquet: std::path::PathBuf = temp_dir.join("test_unified_cnaes.parquet");
+
+        let mut file: File = File::create(&csv).expect("Create temp csv");
+        file.write_all(b"\"6201501\";\"DESENVOLVIMENTO DE PROGRAMAS\"\n")
+            .expect("Write csv");
+        drop(file);
+
+        let rows: usize = to_parquet(&csv, &parquet, TableKind::Cnaes).expect("Convert");
+        assert_eq!(rows, 1);
+        assert!(parquet.exists());
+
+        let _ = std::fs::remove_file(csv);
+        let _ = std::fs::remove_file(parquet);
+    }
+
+    #[test]
+    fn test_unified_to_parquet_municipios() {
+        let temp_dir: std::path::PathBuf = std::env::temp_dir();
+        let csv: std::path::PathBuf = temp_dir.join("test_unified_municipios.csv");
+        let parquet: std::path::PathBuf = temp_dir.join("test_unified_municipios.parquet");
+
+        let mut file: File = File::create(&csv).expect("Create temp csv");
+        file.write_all(b"\"7107\";\"SAO PAULO\"\n")
+            .expect("Write csv");
+        drop(file);
+
+        let rows: usize = to_parquet(&csv, &parquet, TableKind::Municipios).expect("Convert");
         assert_eq!(rows, 1);
         assert!(parquet.exists());
 

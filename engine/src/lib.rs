@@ -1,6 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::useless_conversion)]
 
 pub mod converter;
+pub mod dominio;
 pub mod empresa;
 pub mod estabelecimento;
 pub mod reader;

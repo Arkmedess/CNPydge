@@ -1,20 +1,11 @@
 //! Representação e validação com tipagem forte dos registros da tabela de Sócios do CNPJ.
 
+use crate::util::{
+    ErroCampo, clean_quotes, opt_str, parse_opt_u16, parse_u8, parse_u16, parse_u32,
+};
 use std::str;
 
-/// Erros estritos de validação e parsing de campos de Sócio.
-#[derive(Debug, PartialEq, Eq)]
-pub enum ErroCampo {
-    CnpjInvalido,
-    NumeroInvalido,
-    TextoInvalido,
-    CamposInsuficientes,
-}
-
 /// Registro validado e fortemente tipado de um Sócio da Receita Federal.
-///
-/// Mantém termos canônicos da Receita Federal sem tradução.
-/// A referência temporal `'a` vincula os campos diretamente à memória mapeada (`mmap`).
 #[derive(Debug, PartialEq)]
 pub struct Socio<'a> {
     pub cnpj: &'a [u8],             // 8 caracteres alfanuméricos do CNPJ base
@@ -31,7 +22,7 @@ pub struct Socio<'a> {
 }
 
 impl<'a> Socio<'a> {
-    /// Faz o parsing e a validação estrita de uma linha CSV da tabela de Sócios da Receita Federal.
+    /// Faz o parsing e a validação estrita de uma linha CSV de Sócios.
     pub fn parse_line(line: &'a [u8]) -> Result<Self, ErroCampo> {
         let mut campos: [&'a [u8]; 11] = [&[]; 11];
         let mut indice_campo: usize = 0;
@@ -68,35 +59,20 @@ impl<'a> Socio<'a> {
             return Err(ErroCampo::CnpjInvalido);
         }
 
-        let tipo_socio_raw: &'a [u8] = clean_quotes(campos[1]);
-        let tipo_socio: u8 = parse_u8(tipo_socio_raw)?;
-
+        let tipo_socio: u8 = parse_u8(clean_quotes(campos[1]))?;
         let nome_raw: &'a [u8] = clean_quotes(campos[2]);
         let nome: &'a str = str::from_utf8(nome_raw).map_err(|_| ErroCampo::TextoInvalido)?;
 
         let doc_raw: &'a [u8] = clean_quotes(campos[3]);
         let doc_socio: &'a str = str::from_utf8(doc_raw).map_err(|_| ErroCampo::TextoInvalido)?;
 
-        let qualif_raw: &'a [u8] = clean_quotes(campos[4]);
-        let qualif: u16 = parse_u16(qualif_raw)?;
-
-        let data_raw: &'a [u8] = clean_quotes(campos[5]);
-        let data_entrada: u32 = parse_u32(data_raw)?;
-
-        let pais_raw: &'a [u8] = clean_quotes(campos[6]);
-        let pais: Option<u16> = parse_opt_u16(pais_raw)?;
-
-        let rep_legal_raw: &'a [u8] = clean_quotes(campos[7]);
-        let rep_legal: Option<&'a str> = opt_str(rep_legal_raw)?;
-
-        let nome_rep_raw: &'a [u8] = clean_quotes(campos[8]);
-        let nome_rep: Option<&'a str> = opt_str(nome_rep_raw)?;
-
-        let qualif_rep_raw: &'a [u8] = clean_quotes(campos[9]);
-        let qualif_rep: Option<u16> = parse_opt_u16(qualif_rep_raw)?;
-
-        let faixa_raw: &'a [u8] = clean_quotes(campos[10]);
-        let faixa_etaria: u8 = parse_u8(faixa_raw)?;
+        let qualif: u16 = parse_u16(clean_quotes(campos[4]))?;
+        let data_entrada: u32 = parse_u32(clean_quotes(campos[5]))?;
+        let pais: Option<u16> = parse_opt_u16(clean_quotes(campos[6]))?;
+        let rep_legal: Option<&'a str> = opt_str(clean_quotes(campos[7]))?;
+        let nome_rep: Option<&'a str> = opt_str(clean_quotes(campos[8]))?;
+        let qualif_rep: Option<u16> = parse_opt_u16(clean_quotes(campos[9]))?;
+        let faixa_etaria: u8 = parse_u8(clean_quotes(campos[10]))?;
 
         Ok(Self {
             cnpj: cnpj_raw,
@@ -111,95 +87,6 @@ impl<'a> Socio<'a> {
             qualif_rep,
             faixa_etaria,
         })
-    }
-}
-
-/// Remove aspas delimitadoras externas de um campo.
-#[inline]
-fn clean_quotes(campo: &[u8]) -> &[u8] {
-    if campo.len() >= 2 && campo.first() == Some(&b'"') && campo.last() == Some(&b'"') {
-        &campo[1..campo.len() - 1]
-    } else {
-        campo
-    }
-}
-
-/// Converte fatia de bytes de dígitos ASCII em u8.
-#[inline]
-fn parse_u8(bytes: &[u8]) -> Result<u8, ErroCampo> {
-    if bytes.is_empty() {
-        return Ok(0);
-    }
-    let mut valor: u8 = 0;
-    for &b in bytes {
-        if !b.is_ascii_digit() {
-            return Err(ErroCampo::NumeroInvalido);
-        }
-        valor = valor
-            .checked_mul(10)
-            .and_then(|v: u8| v.checked_add(b - b'0'))
-            .ok_or(ErroCampo::NumeroInvalido)?;
-    }
-    Ok(valor)
-}
-
-/// Converte fatia de bytes de dígitos ASCII em u16.
-#[inline]
-fn parse_u16(bytes: &[u8]) -> Result<u16, ErroCampo> {
-    if bytes.is_empty() {
-        return Ok(0);
-    }
-    let mut valor: u16 = 0;
-    for &b in bytes {
-        if !b.is_ascii_digit() {
-            return Err(ErroCampo::NumeroInvalido);
-        }
-        valor = valor
-            .checked_mul(10)
-            .and_then(|v: u16| v.checked_add((b - b'0') as u16))
-            .ok_or(ErroCampo::NumeroInvalido)?;
-    }
-    Ok(valor)
-}
-
-/// Converte fatia de bytes de dígitos ASCII em u32.
-#[inline]
-fn parse_u32(bytes: &[u8]) -> Result<u32, ErroCampo> {
-    if bytes.is_empty() {
-        return Ok(0);
-    }
-    let mut valor: u32 = 0;
-    for &b in bytes {
-        if !b.is_ascii_digit() {
-            return Err(ErroCampo::NumeroInvalido);
-        }
-        valor = valor
-            .checked_mul(10)
-            .and_then(|v: u32| v.checked_add((b - b'0') as u32))
-            .ok_or(ErroCampo::NumeroInvalido)?;
-    }
-    Ok(valor)
-}
-
-/// Converte fatia de bytes opcional em Option<u16>.
-#[inline]
-fn parse_opt_u16(bytes: &[u8]) -> Result<Option<u16>, ErroCampo> {
-    if bytes.is_empty() {
-        Ok(None)
-    } else {
-        parse_u16(bytes).map(Some)
-    }
-}
-
-/// Converte fatia de bytes opcional em Option<&str>.
-#[inline]
-fn opt_str(bytes: &[u8]) -> Result<Option<&str>, ErroCampo> {
-    if bytes.is_empty() {
-        Ok(None)
-    } else {
-        str::from_utf8(bytes)
-            .map(Some)
-            .map_err(|_| ErroCampo::TextoInvalido)
     }
 }
 

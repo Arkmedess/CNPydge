@@ -1,30 +1,18 @@
 //! Representação e validação com tipagem forte dos registros da tabela de Empresas do CNPJ.
 
+use crate::util::{ErroCampo, clean_quotes, parse_u8, parse_u16};
 use std::str;
 
-/// Erros estritos de validação e parsing de campos de Empresa.
-#[derive(Debug, PartialEq, Eq)]
-pub enum ErroCampo {
-    CnpjInvalido,
-    NumeroInvalido,
-    TextoInvalido,
-    CamposInsuficientes,
-}
-
 /// Registro validado e fortemente tipado de uma Empresa.
-///
-/// Mantém termos canônicos da Receita Federal sem tradução.
-/// A referência de tempo de vida `'a` vincula os campos diretamente à memória
-/// mapeada (`mmap`), garantindo zero alocações na heap durante o parsing.
 #[derive(Debug, PartialEq)]
 pub struct Empresa<'a> {
-    pub cnpj: &'a [u8],
-    pub razao: &'a str,
-    pub nat_jur: u16,
-    pub qualif: u16,
-    pub capital: f64,
-    pub porte: u8,
-    pub ente_fed: Option<&'a str>,
+    pub cnpj: &'a [u8],            // 8 dígitos alfanuméricos do CNPJ básico
+    pub razao: &'a str,            // Razão social tratada
+    pub nat_jur: u16,              // Código da natureza jurídica
+    pub qualif: u16,               // Código de qualificação do responsável
+    pub capital: f64,              // Capital social em reais
+    pub porte: u8,                 // Código do porte da empresa
+    pub ente_fed: Option<&'a str>, // Ente federativo responsável
 }
 
 impl<'a> Empresa<'a> {
@@ -68,17 +56,10 @@ impl<'a> Empresa<'a> {
         let razao_bytes: &'a [u8] = clean_quotes(campos[1]);
         let razao: &'a str = str::from_utf8(razao_bytes).map_err(|_| ErroCampo::TextoInvalido)?;
 
-        let nat_jur_raw: &'a [u8] = clean_quotes(campos[2]);
-        let nat_jur: u16 = parse_u16(nat_jur_raw)?;
-
-        let qualif_raw: &'a [u8] = clean_quotes(campos[3]);
-        let qualif: u16 = parse_u16(qualif_raw)?;
-
-        let capital_raw: &'a [u8] = clean_quotes(campos[4]);
-        let capital: f64 = parse_capital(capital_raw)?;
-
-        let porte_raw: &'a [u8] = clean_quotes(campos[5]);
-        let porte: u8 = parse_u8(porte_raw)?;
+        let nat_jur: u16 = parse_u16(clean_quotes(campos[2]))?;
+        let qualif: u16 = parse_u16(clean_quotes(campos[3]))?;
+        let capital: f64 = parse_capital(clean_quotes(campos[4]))?;
+        let porte: u8 = parse_u8(clean_quotes(campos[5]))?;
 
         let ente_fed_raw: &'a [u8] = clean_quotes(campos[6]);
         let ente_fed: Option<&'a str> = if ente_fed_raw.is_empty() {
@@ -97,54 +78,6 @@ impl<'a> Empresa<'a> {
             ente_fed,
         })
     }
-}
-
-/// Remove aspas delimitadoras externas de um campo, se presentes.
-#[inline]
-fn clean_quotes(campo: &[u8]) -> &[u8] {
-    if campo.len() >= 2 && campo.first() == Some(&b'"') && campo.last() == Some(&b'"') {
-        &campo[1..campo.len() - 1]
-    } else {
-        campo
-    }
-}
-
-/// Converte fatia de bytes de dígitos ASCII em u16 com tipagem estrita.
-#[inline]
-fn parse_u16(bytes: &[u8]) -> Result<u16, ErroCampo> {
-    if bytes.is_empty() {
-        return Ok(0);
-    }
-    let mut valor: u16 = 0;
-    for &b in bytes {
-        if !b.is_ascii_digit() {
-            return Err(ErroCampo::NumeroInvalido);
-        }
-        valor = valor
-            .checked_mul(10)
-            .and_then(|v: u16| v.checked_add((b - b'0') as u16))
-            .ok_or(ErroCampo::NumeroInvalido)?;
-    }
-    Ok(valor)
-}
-
-/// Converte fatia de bytes de dígitos ASCII em u8 com tipagem estrita.
-#[inline]
-fn parse_u8(bytes: &[u8]) -> Result<u8, ErroCampo> {
-    if bytes.is_empty() {
-        return Ok(0);
-    }
-    let mut valor: u8 = 0;
-    for &b in bytes {
-        if !b.is_ascii_digit() {
-            return Err(ErroCampo::NumeroInvalido);
-        }
-        valor = valor
-            .checked_mul(10)
-            .and_then(|v: u8| v.checked_add(b - b'0'))
-            .ok_or(ErroCampo::NumeroInvalido)?;
-    }
-    Ok(valor)
 }
 
 /// Converte valor monetário com vírgula decimal (ex: "1000,50") em f64.

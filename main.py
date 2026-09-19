@@ -71,6 +71,30 @@ def main() -> None:
             f"Simples: {total_sim} linhas convertidas -> {simp_parquet.stat().st_size} bytes."
         )
 
+        # 5. Teste de Tabelas de Domínio (CNAEs e Municípios)
+        cnae_csv: Path = dir_path / "cnaes.csv"
+        cnae_parquet: Path = dir_path / "cnaes.parquet"
+        cnae_csv.write_text(
+            '"6201501";"DESENVOLVIMENTO DE PROGRAMAS DE COMPUTADOR SOB ENCOMENDA"\n',
+            encoding="utf-8",
+        )
+        total_cnae: int = cnpydge.to_parquet(
+            str(cnae_csv), str(cnae_parquet), kind="cnaes"
+        )
+        print(
+            f"CNAEs: {total_cnae} linhas convertidas -> {cnae_parquet.stat().st_size} bytes."
+        )
+
+        mun_csv: Path = dir_path / "municipios.csv"
+        mun_parquet: Path = dir_path / "municipios.parquet"
+        mun_csv.write_text('"7107";"SAO PAULO"\n', encoding="utf-8")
+        total_mun: int = cnpydge.to_parquet(
+            str(mun_csv), str(mun_parquet), kind="municipios"
+        )
+        print(
+            f"Municípios: {total_mun} linhas convertidas -> {mun_parquet.stat().st_size} bytes."
+        )
+
 
 if __name__ == "__main__":
     main()

@@ -57,6 +57,20 @@ def main() -> None:
             f"Estabelecimentos: {total_est} linhas convertidas -> {est_parquet.stat().st_size} bytes."
         )
 
+        # 4. Teste de Simples Nacional / MEI
+        simp_csv: Path = dir_path / "simples.csv"
+        simp_parquet: Path = dir_path / "simples.parquet"
+        simp_csv.write_text(
+            '"12ABC345";"S";"20200101";"20211231";"N";"";""\n',
+            encoding="utf-8",
+        )
+        total_sim: int = cnpydge.to_parquet(
+            str(simp_csv), str(simp_parquet), kind="simples"
+        )
+        print(
+            f"Simples: {total_sim} linhas convertidas -> {simp_parquet.stat().st_size} bytes."
+        )
+
 
 if __name__ == "__main__":
     main()

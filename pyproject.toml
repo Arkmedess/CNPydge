@@ -10,7 +10,12 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = []
 
+[tool.zuban]
+python_executable = ".venv/bin/python"
+mypy_path = ["orchestrator"]
+
 [tool.maturin]
 manifest-path = "engine/Cargo.toml"
 module-name = "cnpydge._core"
 python-source = "orchestrator"
+

@@ -1,6 +1,7 @@
-//! Conversor colunar de alta vazão de registros de Empresas e Sócios para Apache Parquet.
+//! Conversor colunar unificado de alta vazão para Apache Parquet.
 
 use crate::empresa::Empresa;
+use crate::estabelecimento::Estabelecimento;
 use crate::reader::MmapReader;
 use crate::socio::Socio;
 use arrow::array::{
@@ -25,92 +26,105 @@ pub enum ConvertErr {
     Arrow(#[from] arrow::error::ArrowError),
     #[error("Erro no Parquet: {0}")]
     Parquet(#[from] parquet::errors::ParquetError),
+    #[error("Tabela não suportada: {0}")]
+    UnsupportedTable(String),
 }
 
-/// Retorna a definição do esquema colunar do Apache Arrow para a tabela de Empresas.
-#[inline]
-pub fn empresa_schema() -> SchemaRef {
-    let fields: Vec<Field> = vec![
-        Field::new("cnpj_basico", DataType::Utf8, false),
-        Field::new("razao_social", DataType::Utf8, false),
-        Field::new("natureza_juridica", DataType::UInt16, false),
-        Field::new("qualificacao_responsavel", DataType::UInt16, false),
-        Field::new("capital_social", DataType::Float64, false),
-        Field::new("porte", DataType::UInt8, false),
-        Field::new("ente_federativo", DataType::Utf8, true),
-    ];
-    Arc::new(Schema::new(fields))
+/// Identificador fortemente tipado das tabelas do CNPJ suportadas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableKind {
+    Empresas,
+    Socios,
+    Estabelecimentos,
 }
 
-/// Constrói um `RecordBatch` a partir de uma fatia de bytes contendo linhas CSV de Empresas.
-pub fn build_batch(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
-    if slice.is_empty() {
-        return Ok(None);
-    }
-
-    let mut cnpj_b: StringBuilder = StringBuilder::new();
-    let mut razao_b: StringBuilder = StringBuilder::new();
-    let mut nat_jur_b: UInt16Builder = UInt16Builder::new();
-    let mut qualif_b: UInt16Builder = UInt16Builder::new();
-    let mut capital_b: Float64Builder = Float64Builder::new();
-    let mut porte_b: UInt8Builder = UInt8Builder::new();
-    let mut ente_fed_b: StringBuilder = StringBuilder::new();
-
-    let mut count: usize = 0;
-    let mut start: usize = 0;
-
-    for (i, &byte) in slice.iter().enumerate() {
-        if byte == b'\n' {
-            let line: &[u8] = &slice[start..i];
-            start = i + 1;
-
-            if line.is_empty() || (line.len() == 1 && line[0] == b'\r') {
-                continue;
-            }
-
-            let Ok(empresa) = Empresa::parse_line(line) else {
-                continue;
-            };
-            let Ok(cnpj_str) = std::str::from_utf8(empresa.cnpj) else {
-                continue;
-            };
-
-            cnpj_b.append_value(cnpj_str);
-            razao_b.append_value(empresa.razao);
-            nat_jur_b.append_value(empresa.nat_jur);
-            qualif_b.append_value(empresa.qualif);
-            capital_b.append_value(empresa.capital);
-            porte_b.append_value(empresa.porte);
-
-            match empresa.ente_fed {
-                Some(ente) => ente_fed_b.append_value(ente),
-                None => ente_fed_b.append_null(),
-            }
-
-            count += 1;
+impl TableKind {
+    /// Converte string para a variante de tabela correspondente.
+    pub fn parse(s: &str) -> Result<Self, ConvertErr> {
+        match s.trim().to_lowercase().as_str() {
+            "empresas" | "empresa" => Ok(Self::Empresas),
+            "socios" | "socio" => Ok(Self::Socios),
+            "estabelecimentos" | "estabelecimento" => Ok(Self::Estabelecimentos),
+            _ => Err(ConvertErr::UnsupportedTable(s.to_string())),
         }
     }
 
-    if count == 0 {
-        return Ok(None);
+    /// Retorna o esquema colunar Apache Arrow específico da tabela.
+    pub fn schema(&self) -> SchemaRef {
+        match self {
+            Self::Empresas => Arc::new(Schema::new(vec![
+                Field::new("cnpj_basico", DataType::Utf8, false),
+                Field::new("razao_social", DataType::Utf8, false),
+                Field::new("natureza_juridica", DataType::UInt16, false),
+                Field::new("qualificacao_responsavel", DataType::UInt16, false),
+                Field::new("capital_social", DataType::Float64, false),
+                Field::new("porte", DataType::UInt8, false),
+                Field::new("ente_federativo", DataType::Utf8, true),
+            ])),
+            Self::Socios => Arc::new(Schema::new(vec![
+                Field::new("cnpj_basico", DataType::Utf8, false),
+                Field::new("identificador_socio", DataType::UInt8, false),
+                Field::new("nome_socio", DataType::Utf8, false),
+                Field::new("cpf_cnpj_socio", DataType::Utf8, false),
+                Field::new("qualificacao_socio", DataType::UInt16, false),
+                Field::new("data_entrada_sociedade", DataType::UInt32, false),
+                Field::new("pais", DataType::UInt16, true),
+                Field::new("representante_legal", DataType::Utf8, true),
+                Field::new("nome_representante", DataType::Utf8, true),
+                Field::new("qualificacao_representante", DataType::UInt16, true),
+                Field::new("faixa_etaria", DataType::UInt8, false),
+            ])),
+            Self::Estabelecimentos => Arc::new(Schema::new(vec![
+                Field::new("cnpj_basico", DataType::Utf8, false),
+                Field::new("cnpj_ordem", DataType::Utf8, false),
+                Field::new("cnpj_dv", DataType::Utf8, false),
+                Field::new("matriz_filial", DataType::UInt8, false),
+                Field::new("nome_fantasia", DataType::Utf8, true),
+                Field::new("situacao_cadastral", DataType::UInt8, false),
+                Field::new("data_situacao_cadastral", DataType::UInt32, true),
+                Field::new("motivo_situacao_cadastral", DataType::UInt16, false),
+                Field::new("nome_cidade_exterior", DataType::Utf8, true),
+                Field::new("pais", DataType::UInt16, true),
+                Field::new("data_inicio_atividade", DataType::UInt32, true),
+                Field::new("cnae_fiscal_principal", DataType::UInt32, false),
+                Field::new("cnae_fiscal_secundaria", DataType::Utf8, true),
+                Field::new("tipo_logradouro", DataType::Utf8, true),
+                Field::new("logradouro", DataType::Utf8, true),
+                Field::new("numero", DataType::Utf8, true),
+                Field::new("complemento", DataType::Utf8, true),
+                Field::new("bairro", DataType::Utf8, true),
+                Field::new("cep", DataType::Utf8, true),
+                Field::new("uf", DataType::Utf8, true),
+                Field::new("municipio", DataType::UInt16, true),
+                Field::new("ddd_1", DataType::Utf8, true),
+                Field::new("telefone_1", DataType::Utf8, true),
+                Field::new("ddd_2", DataType::Utf8, true),
+                Field::new("telefone_2", DataType::Utf8, true),
+                Field::new("ddd_fax", DataType::Utf8, true),
+                Field::new("fax", DataType::Utf8, true),
+                Field::new("correio_eletronico", DataType::Utf8, true),
+                Field::new("situacao_especial", DataType::Utf8, true),
+                Field::new("data_situacao_especial", DataType::UInt32, true),
+            ])),
+        }
     }
 
-    let columns: Vec<ArrayRef> = vec![
-        Arc::new(cnpj_b.finish()),
-        Arc::new(razao_b.finish()),
-        Arc::new(nat_jur_b.finish()),
-        Arc::new(qualif_b.finish()),
-        Arc::new(capital_b.finish()),
-        Arc::new(porte_b.finish()),
-        Arc::new(ente_fed_b.finish()),
-    ];
-
-    let batch: RecordBatch = RecordBatch::try_new(Arc::clone(schema), columns)?;
-    Ok(Some(batch))
+    /// Constrói um `RecordBatch` para a fatia de bytes de acordo com o tipo da tabela.
+    pub fn build_batch(&self, slice: &[u8]) -> Result<Option<RecordBatch>, ConvertErr> {
+        match self {
+            Self::Empresas => build_empresas(slice, &self.schema()),
+            Self::Socios => build_socios(slice, &self.schema()),
+            Self::Estabelecimentos => build_estabelecimentos(slice, &self.schema()),
+        }
+    }
 }
 
-/// Converte um arquivo CSV de Empresas para Parquet em alta vazão.
-pub fn to_parquet<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> Result<usize, ConvertErr> {
+/// Pipeline unificado de conversão de CSV para Parquet em alta vazão.
+pub fn to_parquet<P1: AsRef<Path>, P2: AsRef<Path>>(
+    src: P1,
+    dst: P2,
+    kind: TableKind,
+) -> Result<usize, ConvertErr> {
     let reader: MmapReader = MmapReader::from_path(src)?;
     if reader.is_empty() {
         return Ok(0);
@@ -119,13 +133,12 @@ pub fn to_parquet<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> Result<
     let num_threads: usize = rayon::current_num_threads().max(1);
     let boundaries: Vec<(usize, usize)> = reader.chunk_boundaries(num_threads);
     let bytes: &[u8] = reader.as_bytes();
-    let schema: SchemaRef = empresa_schema();
 
     let batches: Vec<RecordBatch> = boundaries
         .par_iter()
         .filter_map(|&(start, end)| {
             let chunk_slice: &[u8] = &bytes[start..end];
-            build_batch(chunk_slice, &schema).ok().flatten()
+            kind.build_batch(chunk_slice).ok().flatten()
         })
         .collect();
 
@@ -139,7 +152,7 @@ pub fn to_parquet<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> Result<
         .set_compression(Compression::SNAPPY)
         .build();
 
-    let mut writer: ArrowWriter<File> = ArrowWriter::try_new(file, schema, Some(props))?;
+    let mut writer: ArrowWriter<File> = ArrowWriter::try_new(file, kind.schema(), Some(props))?;
     for batch in &batches {
         writer.write(batch)?;
     }
@@ -148,34 +161,66 @@ pub fn to_parquet<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> Result<
     Ok(total_rows)
 }
 
-/// Retorna a definição do esquema colunar do Apache Arrow para a tabela de Sócios.
-#[inline]
-pub fn socio_schema() -> SchemaRef {
-    let fields: Vec<Field> = vec![
-        Field::new("cnpj_basico", DataType::Utf8, false),
-        Field::new("identificador_socio", DataType::UInt8, false),
-        Field::new("nome_socio", DataType::Utf8, false),
-        Field::new("cpf_cnpj_socio", DataType::Utf8, false),
-        Field::new("qualificacao_socio", DataType::UInt16, false),
-        Field::new("data_entrada_sociedade", DataType::UInt32, false),
-        Field::new("pais", DataType::UInt16, true),
-        Field::new("representante_legal", DataType::Utf8, true),
-        Field::new("nome_representante", DataType::Utf8, true),
-        Field::new("qualificacao_representante", DataType::UInt16, true),
-        Field::new("faixa_etaria", DataType::UInt8, false),
-    ];
-    Arc::new(Schema::new(fields))
-}
-
-/// Constrói um `RecordBatch` a partir de uma fatia de bytes contendo linhas CSV de Sócios.
-pub fn build_socio_batch(
-    slice: &[u8],
-    schema: &SchemaRef,
-) -> Result<Option<RecordBatch>, ConvertErr> {
+fn build_empresas(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
     if slice.is_empty() {
         return Ok(None);
     }
+    let mut cnpj_b: StringBuilder = StringBuilder::new();
+    let mut razao_b: StringBuilder = StringBuilder::new();
+    let mut nat_jur_b: UInt16Builder = UInt16Builder::new();
+    let mut qualif_b: UInt16Builder = UInt16Builder::new();
+    let mut capital_b: Float64Builder = Float64Builder::new();
+    let mut porte_b: UInt8Builder = UInt8Builder::new();
+    let mut ente_fed_b: StringBuilder = StringBuilder::new();
+    let mut count: usize = 0;
+    let mut start: usize = 0;
 
+    for (i, &byte) in slice.iter().enumerate() {
+        if byte == b'\n' {
+            let line: &[u8] = &slice[start..i];
+            start = i + 1;
+            if line.is_empty() || (line.len() == 1 && line[0] == b'\r') {
+                continue;
+            }
+            let Ok(empresa) = Empresa::parse_line(line) else {
+                continue;
+            };
+            let Ok(cnpj_str) = std::str::from_utf8(empresa.cnpj) else {
+                continue;
+            };
+
+            cnpj_b.append_value(cnpj_str);
+            razao_b.append_value(empresa.razao);
+            nat_jur_b.append_value(empresa.nat_jur);
+            qualif_b.append_value(empresa.qualif);
+            capital_b.append_value(empresa.capital);
+            porte_b.append_value(empresa.porte);
+            match empresa.ente_fed {
+                Some(ente) => ente_fed_b.append_value(ente),
+                None => ente_fed_b.append_null(),
+            }
+            count += 1;
+        }
+    }
+    if count == 0 {
+        return Ok(None);
+    }
+    let columns: Vec<ArrayRef> = vec![
+        Arc::new(cnpj_b.finish()),
+        Arc::new(razao_b.finish()),
+        Arc::new(nat_jur_b.finish()),
+        Arc::new(qualif_b.finish()),
+        Arc::new(capital_b.finish()),
+        Arc::new(porte_b.finish()),
+        Arc::new(ente_fed_b.finish()),
+    ];
+    Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
+}
+
+fn build_socios(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
+    if slice.is_empty() {
+        return Ok(None);
+    }
     let mut cnpj_b: StringBuilder = StringBuilder::new();
     let mut tipo_socio_b: UInt8Builder = UInt8Builder::new();
     let mut nome_b: StringBuilder = StringBuilder::new();
@@ -187,7 +232,6 @@ pub fn build_socio_batch(
     let mut nome_rep_b: StringBuilder = StringBuilder::new();
     let mut qualif_rep_b: UInt16Builder = UInt16Builder::new();
     let mut faixa_b: UInt8Builder = UInt8Builder::new();
-
     let mut count: usize = 0;
     let mut start: usize = 0;
 
@@ -195,11 +239,9 @@ pub fn build_socio_batch(
         if byte == b'\n' {
             let line: &[u8] = &slice[start..i];
             start = i + 1;
-
             if line.is_empty() || (line.len() == 1 && line[0] == b'\r') {
                 continue;
             }
-
             let Ok(socio) = Socio::parse_line(line) else {
                 continue;
             };
@@ -213,7 +255,6 @@ pub fn build_socio_batch(
             doc_b.append_value(socio.doc_socio);
             qualif_b.append_value(socio.qualif);
             data_b.append_value(socio.data_entrada);
-
             match socio.pais {
                 Some(p) => pais_b.append_value(p),
                 None => pais_b.append_null(),
@@ -231,15 +272,12 @@ pub fn build_socio_batch(
                 None => qualif_rep_b.append_null(),
             }
             faixa_b.append_value(socio.faixa_etaria);
-
             count += 1;
         }
     }
-
     if count == 0 {
         return Ok(None);
     }
-
     let columns: Vec<ArrayRef> = vec![
         Arc::new(cnpj_b.finish()),
         Arc::new(tipo_socio_b.finish()),
@@ -253,51 +291,165 @@ pub fn build_socio_batch(
         Arc::new(qualif_rep_b.finish()),
         Arc::new(faixa_b.finish()),
     ];
-
-    let batch: RecordBatch = RecordBatch::try_new(Arc::clone(schema), columns)?;
-    Ok(Some(batch))
+    Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
 }
 
-/// Converte um arquivo CSV de Sócios para Parquet em alta vazão.
-pub fn socios_to_parquet<P1: AsRef<Path>, P2: AsRef<Path>>(
-    src: P1,
-    dst: P2,
-) -> Result<usize, ConvertErr> {
-    let reader: MmapReader = MmapReader::from_path(src)?;
-    if reader.is_empty() {
-        return Ok(0);
+fn build_estabelecimentos(
+    slice: &[u8],
+    schema: &SchemaRef,
+) -> Result<Option<RecordBatch>, ConvertErr> {
+    if slice.is_empty() {
+        return Ok(None);
     }
+    let mut cnpj_basico_b: StringBuilder = StringBuilder::new();
+    let mut cnpj_ordem_b: StringBuilder = StringBuilder::new();
+    let mut cnpj_dv_b: StringBuilder = StringBuilder::new();
+    let mut matriz_filial_b: UInt8Builder = UInt8Builder::new();
+    let mut fantasia_b: StringBuilder = StringBuilder::new();
+    let mut situacao_b: UInt8Builder = UInt8Builder::new();
+    let mut data_situacao_b: UInt32Builder = UInt32Builder::new();
+    let mut motivo_b: UInt16Builder = UInt16Builder::new();
+    let mut cidade_ext_b: StringBuilder = StringBuilder::new();
+    let mut pais_b: UInt16Builder = UInt16Builder::new();
+    let mut data_inicio_b: UInt32Builder = UInt32Builder::new();
+    let mut cnae_princ_b: UInt32Builder = UInt32Builder::new();
+    let mut cnae_sec_b: StringBuilder = StringBuilder::new();
+    let mut tipo_logr_b: StringBuilder = StringBuilder::new();
+    let mut logradouro_b: StringBuilder = StringBuilder::new();
+    let mut numero_b: StringBuilder = StringBuilder::new();
+    let mut complemento_b: StringBuilder = StringBuilder::new();
+    let mut bairro_b: StringBuilder = StringBuilder::new();
+    let mut cep_b: StringBuilder = StringBuilder::new();
+    let mut uf_b: StringBuilder = StringBuilder::new();
+    let mut municipio_b: UInt16Builder = UInt16Builder::new();
+    let mut ddd_1_b: StringBuilder = StringBuilder::new();
+    let mut tel_1_b: StringBuilder = StringBuilder::new();
+    let mut ddd_2_b: StringBuilder = StringBuilder::new();
+    let mut tel_2_b: StringBuilder = StringBuilder::new();
+    let mut ddd_fax_b: StringBuilder = StringBuilder::new();
+    let mut fax_b: StringBuilder = StringBuilder::new();
+    let mut email_b: StringBuilder = StringBuilder::new();
+    let mut sit_esp_b: StringBuilder = StringBuilder::new();
+    let mut data_sit_esp_b: UInt32Builder = UInt32Builder::new();
 
-    let num_threads: usize = rayon::current_num_threads().max(1);
-    let boundaries: Vec<(usize, usize)> = reader.chunk_boundaries(num_threads);
-    let bytes: &[u8] = reader.as_bytes();
-    let schema: SchemaRef = socio_schema();
+    let mut count: usize = 0;
+    let mut start: usize = 0;
 
-    let batches: Vec<RecordBatch> = boundaries
-        .par_iter()
-        .filter_map(|&(start, end)| {
-            let chunk_slice: &[u8] = &bytes[start..end];
-            build_socio_batch(chunk_slice, &schema).ok().flatten()
-        })
-        .collect();
+    for (i, &byte) in slice.iter().enumerate() {
+        if byte == b'\n' {
+            let line: &[u8] = &slice[start..i];
+            start = i + 1;
+            if line.is_empty() || (line.len() == 1 && line[0] == b'\r') {
+                continue;
+            }
+            let Ok(est) = Estabelecimento::parse_line(line) else {
+                continue;
+            };
+            let Ok(cnpj_str) = std::str::from_utf8(est.cnpj_basico) else {
+                continue;
+            };
+            let Ok(ordem_str) = std::str::from_utf8(est.cnpj_ordem) else {
+                continue;
+            };
+            let Ok(dv_str) = std::str::from_utf8(est.cnpj_dv) else {
+                continue;
+            };
 
-    let total_rows: usize = batches.iter().map(|b: &RecordBatch| b.num_rows()).sum();
-    if total_rows == 0 {
-        return Ok(0);
+            cnpj_basico_b.append_value(cnpj_str);
+            cnpj_ordem_b.append_value(ordem_str);
+            cnpj_dv_b.append_value(dv_str);
+            matriz_filial_b.append_value(est.matriz_filial);
+
+            append_opt_str(&mut fantasia_b, est.fantasia);
+            situacao_b.append_value(est.situacao);
+            append_opt_u32(&mut data_situacao_b, est.data_situacao);
+            motivo_b.append_value(est.motivo_situacao);
+            append_opt_str(&mut cidade_ext_b, est.cidade_exterior);
+            append_opt_u16(&mut pais_b, est.pais);
+            append_opt_u32(&mut data_inicio_b, est.data_inicio);
+            cnae_princ_b.append_value(est.cnae_principal);
+            append_opt_str(&mut cnae_sec_b, est.cnae_secundario);
+            append_opt_str(&mut tipo_logr_b, est.tipo_logradouro);
+            append_opt_str(&mut logradouro_b, est.logradouro);
+            append_opt_str(&mut numero_b, est.numero);
+            append_opt_str(&mut complemento_b, est.complemento);
+            append_opt_str(&mut bairro_b, est.bairro);
+            append_opt_str(&mut cep_b, est.cep);
+            append_opt_str(&mut uf_b, est.uf);
+            append_opt_u16(&mut municipio_b, est.municipio);
+            append_opt_str(&mut ddd_1_b, est.ddd_1);
+            append_opt_str(&mut tel_1_b, est.telefone_1);
+            append_opt_str(&mut ddd_2_b, est.ddd_2);
+            append_opt_str(&mut tel_2_b, est.telefone_2);
+            append_opt_str(&mut ddd_fax_b, est.ddd_fax);
+            append_opt_str(&mut fax_b, est.fax);
+            append_opt_str(&mut email_b, est.email);
+            append_opt_str(&mut sit_esp_b, est.situacao_especial);
+            append_opt_u32(&mut data_sit_esp_b, est.data_situacao_especial);
+
+            count += 1;
+        }
     }
-
-    let file: File = File::create(dst)?;
-    let props: WriterProperties = WriterProperties::builder()
-        .set_compression(Compression::SNAPPY)
-        .build();
-
-    let mut writer: ArrowWriter<File> = ArrowWriter::try_new(file, schema, Some(props))?;
-    for batch in &batches {
-        writer.write(batch)?;
+    if count == 0 {
+        return Ok(None);
     }
-    writer.close()?;
+    let columns: Vec<ArrayRef> = vec![
+        Arc::new(cnpj_basico_b.finish()),
+        Arc::new(cnpj_ordem_b.finish()),
+        Arc::new(cnpj_dv_b.finish()),
+        Arc::new(matriz_filial_b.finish()),
+        Arc::new(fantasia_b.finish()),
+        Arc::new(situacao_b.finish()),
+        Arc::new(data_situacao_b.finish()),
+        Arc::new(motivo_b.finish()),
+        Arc::new(cidade_ext_b.finish()),
+        Arc::new(pais_b.finish()),
+        Arc::new(data_inicio_b.finish()),
+        Arc::new(cnae_princ_b.finish()),
+        Arc::new(cnae_sec_b.finish()),
+        Arc::new(tipo_logr_b.finish()),
+        Arc::new(logradouro_b.finish()),
+        Arc::new(numero_b.finish()),
+        Arc::new(complemento_b.finish()),
+        Arc::new(bairro_b.finish()),
+        Arc::new(cep_b.finish()),
+        Arc::new(uf_b.finish()),
+        Arc::new(municipio_b.finish()),
+        Arc::new(ddd_1_b.finish()),
+        Arc::new(tel_1_b.finish()),
+        Arc::new(ddd_2_b.finish()),
+        Arc::new(tel_2_b.finish()),
+        Arc::new(ddd_fax_b.finish()),
+        Arc::new(fax_b.finish()),
+        Arc::new(email_b.finish()),
+        Arc::new(sit_esp_b.finish()),
+        Arc::new(data_sit_esp_b.finish()),
+    ];
+    Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
+}
 
-    Ok(total_rows)
+#[inline]
+fn append_opt_str(b: &mut StringBuilder, val: Option<&str>) {
+    match val {
+        Some(v) => b.append_value(v),
+        None => b.append_null(),
+    }
+}
+
+#[inline]
+fn append_opt_u16(b: &mut UInt16Builder, val: Option<u16>) {
+    match val {
+        Some(v) => b.append_value(v),
+        None => b.append_null(),
+    }
+}
+
+#[inline]
+fn append_opt_u32(b: &mut UInt32Builder, val: Option<u32>) {
+    match val {
+        Some(v) => b.append_value(v),
+        None => b.append_null(),
+    }
 }
 
 #[cfg(test)]
@@ -306,78 +458,70 @@ mod tests {
     use std::io::Write;
 
     #[test]
-    fn test_empresa_schema_fields() {
-        let schema: SchemaRef = empresa_schema();
-        assert_eq!(schema.fields().len(), 7);
-        assert_eq!(schema.field(0).name(), "cnpj_basico");
-        assert_eq!(schema.field(1).name(), "razao_social");
-        assert_eq!(schema.field(4).name(), "capital_social");
+    fn test_table_kind_parse() {
+        assert_eq!(TableKind::parse("empresas").unwrap(), TableKind::Empresas);
+        assert_eq!(TableKind::parse("SOCIOS").unwrap(), TableKind::Socios);
+        assert_eq!(
+            TableKind::parse("estabelecimento").unwrap(),
+            TableKind::Estabelecimentos
+        );
+        assert!(TableKind::parse("invalida").is_err());
     }
 
     #[test]
-    fn test_socio_schema_fields() {
-        let schema: SchemaRef = socio_schema();
-        assert_eq!(schema.fields().len(), 11);
-        assert_eq!(schema.field(0).name(), "cnpj_basico");
-        assert_eq!(schema.field(2).name(), "nome_socio");
-        assert_eq!(schema.field(5).name(), "data_entrada_sociedade");
-    }
-
-    #[test]
-    fn test_build_batch_from_slice() {
-        let csv_data: &[u8] = b"\"12345678\";\"EMPRESA A\";\"2062\";\"49\";\"1000,00\";\"01\";\"\"\n\"87654321\";\"EMPRESA B\";\"2062\";\"49\";\"5000,50\";\"03\";\"BRASILIA\"\n";
-        let schema: SchemaRef = empresa_schema();
-        let batch_opt: Option<RecordBatch> =
-            build_batch(csv_data, &schema).expect("Valid batch creation");
-
-        let batch: RecordBatch = batch_opt.expect("Non-empty batch");
-        assert_eq!(batch.num_rows(), 2);
-        assert_eq!(batch.num_columns(), 7);
-    }
-
-    #[test]
-    fn test_to_parquet_file() {
+    fn test_unified_to_parquet_empresas() {
         let temp_dir: std::path::PathBuf = std::env::temp_dir();
-        let csv_path: std::path::PathBuf = temp_dir.join("test_empresas.csv");
-        let parquet_path: std::path::PathBuf = temp_dir.join("test_empresas.parquet");
+        let csv: std::path::PathBuf = temp_dir.join("test_unified_empresas.csv");
+        let parquet: std::path::PathBuf = temp_dir.join("test_unified_empresas.parquet");
 
-        let mut file: File = File::create(&csv_path).expect("Create temp csv");
-        file.write_all(
-            b"\"12345678\";\"EMPRESA ALFA\";\"2062\";\"49\";\"15000,00\";\"03\";\"\"\n\
-              \"87654321\";\"EMPRESA BETA\";\"2062\";\"49\";\"25000,50\";\"05\";\"SAO PAULO\"\n",
-        )
-        .expect("Write to temp csv");
+        let mut file: File = File::create(&csv).expect("Create temp csv");
+        file.write_all(b"\"12ABC345\";\"EMPRESA ALFA\";\"2062\";\"49\";\"15000,00\";\"03\";\"\"\n")
+            .expect("Write csv");
         drop(file);
 
-        let rows: usize =
-            to_parquet(&csv_path, &parquet_path).expect("Conversion to parquet succeeded");
-        assert_eq!(rows, 2);
-        assert!(parquet_path.exists());
+        let rows: usize = to_parquet(&csv, &parquet, TableKind::Empresas).expect("Convert");
+        assert_eq!(rows, 1);
+        assert!(parquet.exists());
 
-        let _ = std::fs::remove_file(csv_path);
-        let _ = std::fs::remove_file(parquet_path);
+        let _ = std::fs::remove_file(csv);
+        let _ = std::fs::remove_file(parquet);
     }
 
     #[test]
-    fn test_socios_to_parquet_file() {
+    fn test_unified_to_parquet_socios() {
         let temp_dir: std::path::PathBuf = std::env::temp_dir();
-        let csv_path: std::path::PathBuf = temp_dir.join("test_socios.csv");
-        let parquet_path: std::path::PathBuf = temp_dir.join("test_socios.parquet");
+        let csv: std::path::PathBuf = temp_dir.join("test_unified_socios.csv");
+        let parquet: std::path::PathBuf = temp_dir.join("test_unified_socios.parquet");
 
-        let mut file: File = File::create(&csv_path).expect("Create temp csv");
-        file.write_all(
-            b"\"12ABC345\";\"2\";\"MARIA SILVA\";\"***123456**\";\"49\";\"20200115\";\"\";\"***000000**\";\"JOSE SILVA\";\"05\";\"5\"\n\
-              \"87654321\";\"1\";\"HOLDING BRASIL PARTICIPACOES\";\"11223344000199\";\"22\";\"20180510\";\"\";\"\";\"\";\"\";\"6\"\n",
-        )
-        .expect("Write to temp csv");
+        let mut file: File = File::create(&csv).expect("Create temp csv");
+        file.write_all(b"\"12ABC345\";\"2\";\"MARIA SILVA\";\"***123456**\";\"49\";\"20200115\";\"\";\"***000000**\";\"JOSE SILVA\";\"05\";\"5\"\n")
+            .expect("Write csv");
         drop(file);
 
-        let rows: usize =
-            socios_to_parquet(&csv_path, &parquet_path).expect("Conversion of socios succeeded");
-        assert_eq!(rows, 2);
-        assert!(parquet_path.exists());
+        let rows: usize = to_parquet(&csv, &parquet, TableKind::Socios).expect("Convert");
+        assert_eq!(rows, 1);
+        assert!(parquet.exists());
 
-        let _ = std::fs::remove_file(csv_path);
-        let _ = std::fs::remove_file(parquet_path);
+        let _ = std::fs::remove_file(csv);
+        let _ = std::fs::remove_file(parquet);
+    }
+
+    #[test]
+    fn test_unified_to_parquet_estabelecimentos() {
+        let temp_dir: std::path::PathBuf = std::env::temp_dir();
+        let csv: std::path::PathBuf = temp_dir.join("test_unified_estab.csv");
+        let parquet: std::path::PathBuf = temp_dir.join("test_unified_estab.parquet");
+
+        let mut file: File = File::create(&csv).expect("Create temp csv");
+        file.write_all(b"\"12ABC345\";\"0001\";\"95\";\"1\";\"MATRIZ\";\"02\";\"20210510\";\"00\";\"\";\"\";\"20210510\";\"6201501\";\"\";\"AVENIDA\";\"PAULISTA\";\"1000\";\"SALA 10\";\"BELA VISTA\";\"01310100\";\"SP\";\"7107\";\"11\";\"33334444\";\"\";\"\";\"\";\"\";\"contato@empresa.com\";\"\";\"\"\n")
+            .expect("Write csv");
+        drop(file);
+
+        let rows: usize = to_parquet(&csv, &parquet, TableKind::Estabelecimentos).expect("Convert");
+        assert_eq!(rows, 1);
+        assert!(parquet.exists());
+
+        let _ = std::fs::remove_file(csv);
+        let _ = std::fs::remove_file(parquet);
     }
 }

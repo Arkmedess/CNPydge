@@ -3,3 +3,6 @@ def version() -> str:
 
 def to_parquet(src: str, dst: str) -> int:
     """Converte um arquivo CSV de Empresas para Parquet em disco, retornando o número de linhas."""
+
+def socios_to_parquet(src: str, dst: str) -> int:
+    """Converte um arquivo CSV de Sócios para Parquet em disco, retornando o número de linhas."""

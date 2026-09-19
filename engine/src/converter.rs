@@ -3,6 +3,7 @@
 use crate::empresa::Empresa;
 use crate::estabelecimento::Estabelecimento;
 use crate::reader::MmapReader;
+use crate::simples::Simples;
 use crate::socio::Socio;
 use arrow::array::{
     ArrayRef, Float64Builder, StringBuilder, UInt8Builder, UInt16Builder, UInt32Builder,
@@ -36,6 +37,7 @@ pub enum TableKind {
     Empresas,
     Socios,
     Estabelecimentos,
+    Simples,
 }
 
 impl TableKind {
@@ -45,6 +47,7 @@ impl TableKind {
             "empresas" | "empresa" => Ok(Self::Empresas),
             "socios" | "socio" => Ok(Self::Socios),
             "estabelecimentos" | "estabelecimento" => Ok(Self::Estabelecimentos),
+            "simples" | "simples_nacional" | "mei" => Ok(Self::Simples),
             _ => Err(ConvertErr::UnsupportedTable(s.to_string())),
         }
     }
@@ -106,6 +109,15 @@ impl TableKind {
                 Field::new("situacao_especial", DataType::Utf8, true),
                 Field::new("data_situacao_especial", DataType::UInt32, true),
             ])),
+            Self::Simples => Arc::new(Schema::new(vec![
+                Field::new("cnpj_basico", DataType::Utf8, false),
+                Field::new("opcao_simples", DataType::Utf8, true),
+                Field::new("data_opcao_simples", DataType::UInt32, true),
+                Field::new("data_exclusao_simples", DataType::UInt32, true),
+                Field::new("opcao_mei", DataType::Utf8, true),
+                Field::new("data_opcao_mei", DataType::UInt32, true),
+                Field::new("data_exclusao_mei", DataType::UInt32, true),
+            ])),
         }
     }
 
@@ -115,6 +127,7 @@ impl TableKind {
             Self::Empresas => build_empresas(slice, &self.schema()),
             Self::Socios => build_socios(slice, &self.schema()),
             Self::Estabelecimentos => build_estabelecimentos(slice, &self.schema()),
+            Self::Simples => build_simples(slice, &self.schema()),
         }
     }
 }
@@ -428,6 +441,60 @@ fn build_estabelecimentos(
     Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
 }
 
+fn build_simples(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
+    let mut cnpj_b = StringBuilder::new();
+    let mut opc_simples_b = StringBuilder::new();
+    let mut dt_opc_simples_b = UInt32Builder::new();
+    let mut dt_exc_simples_b = UInt32Builder::new();
+    let mut opc_mei_b = StringBuilder::new();
+    let mut dt_opc_mei_b = UInt32Builder::new();
+    let mut dt_exc_mei_b = UInt32Builder::new();
+
+    let mut row_count = 0;
+    for line in slice.split(|&b| b == b'\n') {
+        let line = if line.ends_with(b"\r") {
+            &line[..line.len() - 1]
+        } else {
+            line
+        };
+        if line.is_empty() {
+            continue;
+        }
+
+        let Ok(simples) = Simples::parse_line(line) else {
+            continue;
+        };
+        let Ok(cnpj_str) = std::str::from_utf8(simples.cnpj_basico) else {
+            continue;
+        };
+
+        cnpj_b.append_value(cnpj_str);
+        append_opt_str(&mut opc_simples_b, simples.opcao_simples);
+        append_opt_u32(&mut dt_opc_simples_b, simples.data_opcao_simples);
+        append_opt_u32(&mut dt_exc_simples_b, simples.data_exclusao_simples);
+        append_opt_str(&mut opc_mei_b, simples.opcao_mei);
+        append_opt_u32(&mut dt_opc_mei_b, simples.data_opcao_mei);
+        append_opt_u32(&mut dt_exc_mei_b, simples.data_exclusao_mei);
+
+        row_count += 1;
+    }
+
+    if row_count == 0 {
+        return Ok(None);
+    }
+
+    let columns: Vec<ArrayRef> = vec![
+        Arc::new(cnpj_b.finish()),
+        Arc::new(opc_simples_b.finish()),
+        Arc::new(dt_opc_simples_b.finish()),
+        Arc::new(dt_exc_simples_b.finish()),
+        Arc::new(opc_mei_b.finish()),
+        Arc::new(dt_opc_mei_b.finish()),
+        Arc::new(dt_exc_mei_b.finish()),
+    ];
+    Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
+}
+
 #[inline]
 fn append_opt_str(b: &mut StringBuilder, val: Option<&str>) {
     match val {
@@ -465,6 +532,7 @@ mod tests {
             TableKind::parse("estabelecimento").unwrap(),
             TableKind::Estabelecimentos
         );
+        assert_eq!(TableKind::parse("simples").unwrap(), TableKind::Simples);
         assert!(TableKind::parse("invalida").is_err());
     }
 
@@ -518,6 +586,25 @@ mod tests {
         drop(file);
 
         let rows: usize = to_parquet(&csv, &parquet, TableKind::Estabelecimentos).expect("Convert");
+        assert_eq!(rows, 1);
+        assert!(parquet.exists());
+
+        let _ = std::fs::remove_file(csv);
+        let _ = std::fs::remove_file(parquet);
+    }
+
+    #[test]
+    fn test_unified_to_parquet_simples() {
+        let temp_dir: std::path::PathBuf = std::env::temp_dir();
+        let csv: std::path::PathBuf = temp_dir.join("test_unified_simples.csv");
+        let parquet: std::path::PathBuf = temp_dir.join("test_unified_simples.parquet");
+
+        let mut file: File = File::create(&csv).expect("Create temp csv");
+        file.write_all(b"\"12ABC345\";\"S\";\"20200101\";\"20211231\";\"N\";\"\";\"\"\n")
+            .expect("Write csv");
+        drop(file);
+
+        let rows: usize = to_parquet(&csv, &parquet, TableKind::Simples).expect("Convert");
         assert_eq!(rows, 1);
         assert!(parquet.exists());
 

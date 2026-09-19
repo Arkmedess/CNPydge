@@ -4,6 +4,7 @@ pub mod converter;
 pub mod empresa;
 pub mod estabelecimento;
 pub mod reader;
+pub mod simples;
 pub mod socio;
 pub mod util;
 

@@ -22,12 +22,16 @@ use std::sync::Arc;
 /// Erros tipados durante a leitura, conversão colunar e gravação do Parquet.
 #[derive(Debug, thiserror::Error)]
 pub enum ConvertErr {
+    /// Falha de I/O na leitura do arquivo de origem ou criação do arquivo de destino.
     #[error("Erro de I/O: {0}")]
     Io(#[from] std::io::Error),
+    /// Falha durante a construção de arrays ou batches no Apache Arrow.
     #[error("Erro no Arrow: {0}")]
     Arrow(#[from] arrow::error::ArrowError),
+    /// Falha na serialização ou escrita do arquivo Apache Parquet.
     #[error("Erro no Parquet: {0}")]
     Parquet(#[from] parquet::errors::ParquetError),
+    /// Identificador de entidade não suportado pelo conversor.
     #[error("Tabela não suportada: {0}")]
     UnsupportedTable(String),
 }
@@ -35,20 +39,39 @@ pub enum ConvertErr {
 /// Identificador fortemente tipado das tabelas do CNPJ suportadas.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TableKind {
+    /// Tabela principal de dados cadastrais de Empresas.
     Empresas,
+    /// Tabela do Quadro de Sócios e Administradores (QSA).
     Socios,
+    /// Tabela de unidades e dados de Estabelecimentos (matriz/filial).
     Estabelecimentos,
+    /// Tabela de histórico e opção pelo Simples Nacional e MEI.
     Simples,
+    /// Tabela de Classificação Nacional de Atividades Econômicas.
     Cnaes,
+    /// Tabela de motivos de situação cadastral.
     Motivos,
+    /// Tabela de municípios da Receita Federal / SIAFI.
     Municipios,
+    /// Tabela de naturezas jurídicas.
     Naturezas,
+    /// Tabela de países segundo a Receita Federal.
     Paises,
+    /// Tabela de qualificações de sócios e representantes legais.
     Qualificacoes,
 }
 
 impl TableKind {
     /// Converte string para a variante de tabela correspondente.
+    ///
+    /// ### Parâmetros
+    /// - `s`: Identificador textual da tabela (case-insensitive, ex.: `"empresas"`, `"socios"`).
+    ///
+    /// ### Retorno
+    /// Variante `TableKind` mapeada.
+    ///
+    /// ### Erros
+    /// Retorna `ConvertErr::UnsupportedTable` caso o identificador não seja reconhecido.
     pub fn parse(s: &str) -> Result<Self, ConvertErr> {
         match s.trim().to_lowercase().as_str() {
             "empresas" | "empresa" => Ok(Self::Empresas),
@@ -66,6 +89,9 @@ impl TableKind {
     }
 
     /// Retorna o esquema colunar Apache Arrow específico da tabela.
+    ///
+    /// ### Retorno
+    /// Referência compartilhada imutável (`SchemaRef`) para o esquema Arrow configurado.
     pub fn schema(&self) -> SchemaRef {
         match self {
             Self::Empresas => Arc::new(Schema::new(vec![
@@ -147,6 +173,15 @@ impl TableKind {
     }
 
     /// Constrói um `RecordBatch` para a fatia de bytes de acordo com o tipo da tabela.
+    ///
+    /// ### Parâmetros
+    /// - `slice`: Fatia de bytes mapeada contendo linhas íntegras do CSV.
+    ///
+    /// ### Retorno
+    /// `Ok(Some(RecordBatch))` com as colunas Arrow povoadas ou `Ok(None)` se a fatia estiver vazia.
+    ///
+    /// ### Erros
+    /// Retorna `ConvertErr` caso haja inconsistência de tipos ou falha de construção do batch.
     pub fn build_batch(&self, slice: &[u8]) -> Result<Option<RecordBatch>, ConvertErr> {
         match self {
             Self::Empresas => build_empresas(slice, &self.schema()),
@@ -164,6 +199,17 @@ impl TableKind {
 }
 
 /// Pipeline unificado de conversão de CSV para Parquet em alta vazão.
+///
+/// ### Parâmetros
+/// - `src`: Caminho de origem do arquivo CSV no disco.
+/// - `dst`: Caminho de destino do arquivo Parquet colunar gerado.
+/// - `kind`: Variante fortemente tipada `TableKind` definindo o parser e esquema.
+///
+/// ### Retorno
+/// Contagem total de linhas válidas convertidas e gravadas com sucesso.
+///
+/// ### Erros
+/// Retorna `ConvertErr` em caso de erro de leitura mapeada, parsing de fatias ou escrita Parquet.
 pub fn to_parquet<P1: AsRef<Path>, P2: AsRef<Path>>(
     src: P1,
     dst: P2,

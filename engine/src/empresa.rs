@@ -6,17 +6,36 @@ use std::str;
 /// Registro validado e fortemente tipado de uma Empresa.
 #[derive(Debug, PartialEq)]
 pub struct Empresa<'a> {
-    pub cnpj: &'a [u8],            // 8 dígitos alfanuméricos do CNPJ básico
-    pub razao: &'a str,            // Razão social tratada
-    pub nat_jur: u16,              // Código da natureza jurídica
-    pub qualif: u16,               // Código de qualificação do responsável
-    pub capital: f64,              // Capital social em reais
-    pub porte: u8,                 // Código do porte da empresa
-    pub ente_fed: Option<&'a str>, // Ente federativo responsável
+    /// 8 caracteres alfanuméricos do CNPJ básico.
+    pub cnpj: &'a [u8],
+    /// Razão social tratada da entidade.
+    pub razao: &'a str,
+    /// Código numérico da natureza jurídica da entidade.
+    pub nat_jur: u16,
+    /// Código de qualificação da pessoa física responsável.
+    pub qualif: u16,
+    /// Capital social em reais (convertido de representação monetária brasileira).
+    pub capital: f64,
+    /// Código do porte da empresa (01 Não Informado, 03 EPP, 05 Demais).
+    pub porte: u8,
+    /// Ente federativo responsável no caso de administração pública.
+    pub ente_fed: Option<&'a str>,
 }
 
 impl<'a> Empresa<'a> {
     /// Faz o parsing e a validação estrita de uma linha CSV da Receita Federal.
+    ///
+    /// ### Parâmetros
+    /// - `linha`: Fatia bruta de bytes referente a uma linha do arquivo CSV de Empresas.
+    ///
+    /// ### Retorno
+    /// Instância de `Empresa<'a>` contendo referências zero-copy aos campos validados.
+    ///
+    /// ### Erros
+    /// - `ErroCampo::CamposInsuficientes`: Se a linha contiver menos de 7 colunas delimitadas por `;`.
+    /// - `ErroCampo::CnpjInvalido`: Se o CNPJ básico não possuir 8 posições alfanuméricas.
+    /// - `ErroCampo::NumeroInvalido`: Se natureza jurídica, qualificação, capital ou porte forem inválidos.
+    /// - `ErroCampo::TextoInvalido`: Se razão social ou ente federativo não forem UTF-8 válidos.
     pub fn parse_line(linha: &'a [u8]) -> Result<Self, ErroCampo> {
         let mut campos: [&'a [u8]; 7] = [&[]; 7];
         let mut indice_campo: usize = 0;
@@ -80,7 +99,16 @@ impl<'a> Empresa<'a> {
     }
 }
 
-/// Converte valor monetário com vírgula decimal (ex: "1000,50") em f64.
+/// Converte valor monetário com vírgula decimal (ex.: "1000,50") em f64.
+///
+/// ### Parâmetros
+/// - `bytes`: Fatia de bytes contendo o valor monetário bruto em formato brasileiro.
+///
+/// ### Retorno
+/// Valor numérico em ponto flutuante de precisão dupla (`f64`).
+///
+/// ### Erros
+/// Retorna `ErroCampo::NumeroInvalido` caso o conteúdo não seja UTF-8 válido ou falhe no parse numérico.
 fn parse_capital(bytes: &[u8]) -> Result<f64, ErroCampo> {
     if bytes.is_empty() {
         return Ok(0.0);

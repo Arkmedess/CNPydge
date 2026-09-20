@@ -31,10 +31,10 @@ fn split_two_fields(line: &[u8]) -> Result<(&[u8], &[u8]), ErroCampo> {
 impl<'a> Dominio<'a, u32> {
     /// Faz o parse de linha para tabelas com chave u32 (ex.: Cnaes).
     ///
-    /// # Parâmetros
+    /// ### Parâmetros
     /// - `line`: Fatia de bytes de uma linha CSV.
     ///
-    /// # Retorno
+    /// ### Retorno
     /// - `Result<Self, ErroCampo>`: Registro tipado ou erro de validação.
     pub fn parse_line(line: &'a [u8]) -> Result<Self, ErroCampo> {
         let (raw_cod, raw_desc) = split_two_fields(line)?;
@@ -48,10 +48,10 @@ impl<'a> Dominio<'a, u32> {
 impl<'a> Dominio<'a, u16> {
     /// Faz o parse de linha para tabelas com chave u16 (Motivos, Municipios, Naturezas, Paises, Qualificacoes).
     ///
-    /// # Parâmetros
+    /// ### Parâmetros
     /// - `line`: Fatia de bytes de uma linha CSV.
     ///
-    /// # Retorno
+    /// ### Retorno
     /// - `Result<Self, ErroCampo>`: Registro tipado ou erro de validação.
     pub fn parse_line(line: &'a [u8]) -> Result<Self, ErroCampo> {
         let (raw_cod, raw_desc) = split_two_fields(line)?;

@@ -8,6 +8,7 @@ wheels/
 .ruff_cache/
 .pytest_cache/
 .mypy_cache/
+.coverage
 
 # Compiled native extensions (maturin develop outputs)
 *.so

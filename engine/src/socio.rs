@@ -8,21 +8,44 @@ use std::str;
 /// Registro validado e fortemente tipado de um Sócio da Receita Federal.
 #[derive(Debug, PartialEq)]
 pub struct Socio<'a> {
-    pub cnpj: &'a [u8],             // 8 caracteres alfanuméricos do CNPJ base
-    pub tipo_socio: u8,             // 1 = PJ, 2 = PF, 3 = Estrangeiro
-    pub nome: &'a str,              // Nome do sócio ou razão social da PJ sócia
-    pub doc_socio: &'a str,         // CPF descaracterizado ou CNPJ do sócio
-    pub qualif: u16,                // Código da qualificação do sócio
-    pub data_entrada: u32,          // Data de entrada na sociedade (AAAAMMDD)
-    pub pais: Option<u16>,          // Código do país de residência (se houver)
-    pub rep_legal: Option<&'a str>, // CPF do representante legal
-    pub nome_rep: Option<&'a str>,  // Nome do representante legal
-    pub qualif_rep: Option<u16>,    // Qualificação do representante legal
-    pub faixa_etaria: u8,           // Código de faixa etária (1 a 9)
+    /// 8 caracteres alfanuméricos do CNPJ base.
+    pub cnpj: &'a [u8],
+    /// Identificador do tipo de sócio (1 PJ, 2 PF, 3 Estrangeiro).
+    pub tipo_socio: u8,
+    /// Nome do sócio ou razão social da pessoa jurídica sócia.
+    pub nome: &'a str,
+    /// CPF descaracterizado ou CNPJ do sócio.
+    pub doc_socio: &'a str,
+    /// Código da qualificação societária (sócio, administrador, etc.).
+    pub qualif: u16,
+    /// Data de ingresso na sociedade no formato numérico YYYYMMDD.
+    pub data_entrada: u32,
+    /// Código do país de residência no caso de sócio estrangeiro.
+    pub pais: Option<u16>,
+    /// CPF descaracterizado do representante legal (se aplicável).
+    pub rep_legal: Option<&'a str>,
+    /// Nome do representante legal (se aplicável).
+    pub nome_rep: Option<&'a str>,
+    /// Código de qualificação do representante legal (se aplicável).
+    pub qualif_rep: Option<u16>,
+    /// Código correspondente à faixa etária do integrante societário (1 a 9).
+    pub faixa_etaria: u8,
 }
 
 impl<'a> Socio<'a> {
     /// Faz o parsing e a validação estrita de uma linha CSV de Sócios.
+    ///
+    /// ### Parâmetros
+    /// - `line`: Fatia bruta de bytes referente a uma linha do arquivo CSV de Sócios.
+    ///
+    /// ### Retorno
+    /// Instância validada de `Socio<'a>` com referências zero-copy aos campos.
+    ///
+    /// ### Erros
+    /// - `ErroCampo::CamposInsuficientes`: Se a linha contiver menos de 11 colunas delimitadas por `;`.
+    /// - `ErroCampo::CnpjInvalido`: Se o CNPJ não possuir 8 posições alfanuméricas.
+    /// - `ErroCampo::NumeroInvalido`: Se tipos numéricos ou datas falharem na conversão.
+    /// - `ErroCampo::TextoInvalido`: Se strings e documentos não forem UTF-8 válidos.
     pub fn parse_line(line: &'a [u8]) -> Result<Self, ErroCampo> {
         let mut campos: [&'a [u8]; 11] = [&[]; 11];
         let mut indice_campo: usize = 0;

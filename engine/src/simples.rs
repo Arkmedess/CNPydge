@@ -17,10 +17,10 @@ pub struct Simples<'a> {
 impl<'a> Simples<'a> {
     /// Faz o parse de uma fatia de bytes de uma linha CSV da tabela Simples.
     ///
-    /// # Parâmetros
+    /// ### Parâmetros
     /// - `line`: Fatia de bytes referente a uma linha única de texto CSV.
     ///
-    /// # Retorno
+    /// ### Retorno
     /// - `Result<Self, ErroCampo>`: Estrutura tipada ou erro de parsing/validação.
     pub fn parse_line(line: &'a [u8]) -> Result<Self, ErroCampo> {
         let mut campos = [&b""[..]; 7];

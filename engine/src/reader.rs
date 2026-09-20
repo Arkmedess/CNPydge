@@ -15,13 +15,13 @@ pub struct MmapReader {
 impl MmapReader {
     /// Abre um arquivo e mapeia seu conteúdo integral no espaço de memória virtual.
     ///
-    /// # Parâmetros
+    /// ### Parâmetros
     /// - `path`: Caminho para o arquivo no sistema de arquivos.
     ///
-    /// # Erros
+    /// ### Erros
     /// Retorna erro de I/O caso o arquivo não exista, não possa ser lido ou ocorra falha no mapeamento.
     ///
-    /// # Segurança
+    /// ### Segurança
     /// O mapeamento de memória é considerado `unsafe` na biblioteca `memmap2` porque alterações
     /// concorrentes no arquivo por outros processos podem causar comportamento indefinido.
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, std::io::Error> {
@@ -52,6 +52,12 @@ impl MmapReader {
     /// Calcula os limites `(início, fim)` para dividir o arquivo em blocos alinhados por quebras de linha.
     ///
     /// Garante custo operacional mínimo (zero-copy) retornando apenas índices de corte sem alocar buffers.
+    ///
+    /// ### Parâmetros
+    /// - `num_chunks`: Quantidade desejada de fatias (geralmente mapeada para o número de threads).
+    ///
+    /// ### Retorno
+    /// Vetor de tuplas `(offset_inicio, offset_fim)` demarcando as fatias contíguas.
     pub fn chunk_boundaries(&self, num_chunks: usize) -> Vec<(usize, usize)> {
         find_chunk_boundaries(&self.mmap, num_chunks)
     }
@@ -59,7 +65,14 @@ impl MmapReader {
 
 /// Localiza as fronteiras de corte em um buffer de bytes alinhando cada bloco com a quebra de linha (`\n`).
 ///
-/// # Invariantes Garantidos
+/// ### Parâmetros
+/// - `data`: Fatia bruta de bytes mapeada em memória virtual.
+/// - `num_chunks`: Número de divisões pretendidas.
+///
+/// ### Retorno
+/// Vetor contendo tuplas `(offset_inicio, offset_fim)` garantindo que nenhum registro CSV seja particionado.
+///
+/// ### Invariantes Garantidos
 /// 1. Continuidade: O início do bloco `i + 1` é exatamente igual ao fim do bloco `i`.
 /// 2. Integridade de registros: Nenhuma linha é cortada ao meio; os blocos intermediários terminam em `\n`.
 /// 3. Cobertura total: A soma dos comprimentos de todos os blocos equivale exatamente ao tamanho total do buffer.
@@ -72,9 +85,9 @@ pub fn find_chunk_boundaries(data: &[u8], num_chunks: usize) -> Vec<(usize, usiz
         return vec![(0, data.len())];
     }
 
-    let chunk_size = data.len() / num_chunks;
-    let mut boundaries = Vec::with_capacity(num_chunks);
-    let mut start = 0;
+    let chunk_size: usize = data.len() / num_chunks;
+    let mut boundaries: Vec<(usize, usize)> = Vec::with_capacity(num_chunks);
+    let mut start: usize = 0;
 
     while start < data.len() {
         if boundaries.len() + 1 == num_chunks {
@@ -83,17 +96,17 @@ pub fn find_chunk_boundaries(data: &[u8], num_chunks: usize) -> Vec<(usize, usiz
             break;
         }
 
-        let tentative_end = start + chunk_size;
+        let tentative_end: usize = start + chunk_size;
         if tentative_end >= data.len() {
             boundaries.push((start, data.len()));
             break;
         }
 
         // Busca a próxima quebra de linha a partir do ponto pretendido de corte
-        let next_newline = data[tentative_end..]
+        let next_newline: usize = data[tentative_end..]
             .iter()
             .position(|&b| b == b'\n')
-            .map(|pos| tentative_end + pos + 1)
+            .map(|pos: usize| tentative_end + pos + 1)
             .unwrap_or(data.len());
 
         boundaries.push((start, next_newline));

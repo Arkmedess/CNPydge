@@ -5,13 +5,23 @@ use std::str;
 /// Erros estritos de validação e parsing de campos.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ErroCampo {
+    /// CNPJ com extensão divergente de 8 dígitos ou caracteres não alfanuméricos.
     CnpjInvalido,
+    /// Dígitos não numéricos ou valor superior à capacidade do tipo inteiro.
     NumeroInvalido,
+    /// Sequência de bytes que não representa uma string UTF-8 válida.
     TextoInvalido,
+    /// Linha com quantidade de colunas separadas por ponto e vírgula insuficiente.
     CamposInsuficientes,
 }
 
 /// Remove aspas delimitadoras externas de um campo, se presentes.
+///
+/// ### Parâmetros
+/// - `campo`: Fatia de bytes referente ao valor bruto extraído da coluna.
+///
+/// ### Retorno
+/// Subfatia sem as aspas nas extremidades ou a própria fatia original.
 #[inline]
 pub fn clean_quotes(campo: &[u8]) -> &[u8] {
     if campo.len() >= 2 && campo.first() == Some(&b'"') && campo.last() == Some(&b'"') {
@@ -41,24 +51,60 @@ fn parse_ascii_digits(bytes: &[u8]) -> Result<u64, ErroCampo> {
 }
 
 /// Converte fatia de bytes de dígitos ASCII em u8.
+///
+/// ### Parâmetros
+/// - `bytes`: Fatia de bytes contendo dígitos numéricos ASCII.
+///
+/// ### Retorno
+/// Valor convertido em `u8`.
+///
+/// ### Erros
+/// Retorna `ErroCampo::NumeroInvalido` se houver caracteres não numéricos ou overflow (> 255).
 #[inline]
 pub fn parse_u8(bytes: &[u8]) -> Result<u8, ErroCampo> {
     u8::try_from(parse_ascii_digits(bytes)?).map_err(|_| ErroCampo::NumeroInvalido)
 }
 
 /// Converte fatia de bytes de dígitos ASCII em u16.
+///
+/// ### Parâmetros
+/// - `bytes`: Fatia de bytes contendo dígitos numéricos ASCII.
+///
+/// ### Retorno
+/// Valor convertido em `u16`.
+///
+/// ### Erros
+/// Retorna `ErroCampo::NumeroInvalido` se houver caracteres não numéricos ou overflow (> 65.535).
 #[inline]
 pub fn parse_u16(bytes: &[u8]) -> Result<u16, ErroCampo> {
     u16::try_from(parse_ascii_digits(bytes)?).map_err(|_| ErroCampo::NumeroInvalido)
 }
 
 /// Converte fatia de bytes de dígitos ASCII em u32.
+///
+/// ### Parâmetros
+/// - `bytes`: Fatia de bytes contendo dígitos numéricos ASCII.
+///
+/// ### Retorno
+/// Valor convertido em `u32`.
+///
+/// ### Erros
+/// Retorna `ErroCampo::NumeroInvalido` se houver caracteres não numéricos ou overflow (> 4.294.967.295).
 #[inline]
 pub fn parse_u32(bytes: &[u8]) -> Result<u32, ErroCampo> {
     u32::try_from(parse_ascii_digits(bytes)?).map_err(|_| ErroCampo::NumeroInvalido)
 }
 
 /// Converte fatia de bytes opcional em Option<u16>.
+///
+/// ### Parâmetros
+/// - `bytes`: Fatia de bytes contendo dígitos numéricos ou vazia.
+///
+/// ### Retorno
+/// `Ok(Some(u16))` se contiver número válido, `Ok(None)` se vazia.
+///
+/// ### Erros
+/// Retorna `ErroCampo::NumeroInvalido` se o conteúdo não for numérico ou sofrer overflow.
 #[inline]
 pub fn parse_opt_u16(bytes: &[u8]) -> Result<Option<u16>, ErroCampo> {
     if bytes.is_empty() {
@@ -69,6 +115,15 @@ pub fn parse_opt_u16(bytes: &[u8]) -> Result<Option<u16>, ErroCampo> {
 }
 
 /// Converte fatia de bytes opcional em Option<u32>.
+///
+/// ### Parâmetros
+/// - `bytes`: Fatia de bytes contendo dígitos numéricos ou vazia.
+///
+/// ### Retorno
+/// `Ok(Some(u32))` se contiver número válido, `Ok(None)` se vazia.
+///
+/// ### Erros
+/// Retorna `ErroCampo::NumeroInvalido` se o conteúdo não for numérico ou sofrer overflow.
 #[inline]
 pub fn parse_opt_u32(bytes: &[u8]) -> Result<Option<u32>, ErroCampo> {
     if bytes.is_empty() {
@@ -79,6 +134,15 @@ pub fn parse_opt_u32(bytes: &[u8]) -> Result<Option<u32>, ErroCampo> {
 }
 
 /// Converte fatia de bytes opcional em Option<&str>.
+///
+/// ### Parâmetros
+/// - `bytes`: Fatia de bytes UTF-8 ou vazia.
+///
+/// ### Retorno
+/// `Ok(Some(&str))` se contiver texto válido, `Ok(None)` se vazia.
+///
+/// ### Erros
+/// Retorna `ErroCampo::TextoInvalido` caso a fatia não seja UTF-8 válida.
 #[inline]
 pub fn opt_str(bytes: &[u8]) -> Result<Option<&str>, ErroCampo> {
     if bytes.is_empty() {

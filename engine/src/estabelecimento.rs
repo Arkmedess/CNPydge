@@ -7,40 +7,82 @@ use crate::util::{
 /// Registro validado e fortemente tipado de um Estabelecimento da Receita Federal.
 #[derive(Debug, PartialEq)]
 pub struct Estabelecimento<'a> {
-    pub cnpj_basico: &'a [u8],               // 8 caracteres alfanuméricos
-    pub cnpj_ordem: &'a [u8],                // 4 dígitos (ex.: "0001")
-    pub cnpj_dv: &'a [u8],                   // 2 dígitos verificadores
-    pub matriz_filial: u8,                   // 1 = Matriz, 2 = Filial
-    pub fantasia: Option<&'a str>,           // Nome fantasia
-    pub situacao: u8,                        // Situação cadastral
-    pub data_situacao: Option<u32>,          // AAAAMMDD
-    pub motivo_situacao: u16,                // Código do motivo da situação
-    pub cidade_exterior: Option<&'a str>,    // Nome da cidade no exterior
-    pub pais: Option<u16>,                   // Código do país
-    pub data_inicio: Option<u32>,            // Data de início da atividade
-    pub cnae_principal: u32,                 // Código CNAE fiscal principal (7 dígitos)
-    pub cnae_secundario: Option<&'a str>,    // Lista de CNAEs secundários
-    pub tipo_logradouro: Option<&'a str>,    // Tipo de logradouro
-    pub logradouro: Option<&'a str>,         // Logradouro
-    pub numero: Option<&'a str>,             // Número
-    pub complemento: Option<&'a str>,        // Complemento
-    pub bairro: Option<&'a str>,             // Bairro
-    pub cep: Option<&'a str>,                // CEP
-    pub uf: Option<&'a str>,                 // Unidade federativa (sigla estado)
-    pub municipio: Option<u16>,              // Código do município (TOM)
-    pub ddd_1: Option<&'a str>,              // DDD 1
-    pub telefone_1: Option<&'a str>,         // Telefone 1
-    pub ddd_2: Option<&'a str>,              // DDD 2
-    pub telefone_2: Option<&'a str>,         // Telefone 2
-    pub ddd_fax: Option<&'a str>,            // DDD Fax
-    pub fax: Option<&'a str>,                // Fax
-    pub email: Option<&'a str>,              // E-mail
-    pub situacao_especial: Option<&'a str>,  // Situação especial
-    pub data_situacao_especial: Option<u32>, // Data da situação especial
+    /// 8 caracteres alfanuméricos do CNPJ básico.
+    pub cnpj_basico: &'a [u8],
+    /// 4 caracteres da ordem do estabelecimento (ex.: "0001").
+    pub cnpj_ordem: &'a [u8],
+    /// 2 caracteres do dígito verificador do CNPJ.
+    pub cnpj_dv: &'a [u8],
+    /// Identificador de tipo (1 Matriz, 2 Filial).
+    pub matriz_filial: u8,
+    /// Nome fantasia do estabelecimento (se houver).
+    pub fantasia: Option<&'a str>,
+    /// Código da situação cadastral (01 Nula, 02 Ativa, 03 Suspensa, 04 Inapta, 08 Baixada).
+    pub situacao: u8,
+    /// Data do evento da situação cadastral no formato YYYYMMDD.
+    pub data_situacao: Option<u32>,
+    /// Código do motivo da situação cadastral.
+    pub motivo_situacao: u16,
+    /// Nome da cidade no exterior (para unidades sediadas fora do país).
+    pub cidade_exterior: Option<&'a str>,
+    /// Código do país no exterior.
+    pub pais: Option<u16>,
+    /// Data de início da atividade econômica no formato YYYYMMDD.
+    pub data_inicio: Option<u32>,
+    /// Código numérico da atividade econômica fiscal principal (CNAE de 7 dígitos).
+    pub cnae_principal: u32,
+    /// Lista de códigos CNAEs secundários separados por vírgula.
+    pub cnae_secundario: Option<&'a str>,
+    /// Tipo de logradouro (Rua, Avenida, etc.).
+    pub tipo_logradouro: Option<&'a str>,
+    /// Nome do logradouro.
+    pub logradouro: Option<&'a str>,
+    /// Número do imóvel ou identificação predial.
+    pub numero: Option<&'a str>,
+    /// Complemento do endereço (sala, bloco, etc.).
+    pub complemento: Option<&'a str>,
+    /// Bairro ou distrito do endereço.
+    pub bairro: Option<&'a str>,
+    /// Código de Endereçamento Postal (8 caracteres).
+    pub cep: Option<&'a str>,
+    /// Sigla da Unidade Federativa estadual (ex.: "SP").
+    pub uf: Option<&'a str>,
+    /// Código numérico de identificação municipal (SIAFI/RFB).
+    pub municipio: Option<u16>,
+    /// Código DDD do telefone primário.
+    pub ddd_1: Option<&'a str>,
+    /// Número do telefone primário.
+    pub telefone_1: Option<&'a str>,
+    /// Código DDD do telefone secundário.
+    pub ddd_2: Option<&'a str>,
+    /// Número do telefone secundário.
+    pub telefone_2: Option<&'a str>,
+    /// Código DDD do fax.
+    pub ddd_fax: Option<&'a str>,
+    /// Número do fax.
+    pub fax: Option<&'a str>,
+    /// Endereço de correio eletrônico cadastrado.
+    pub email: Option<&'a str>,
+    /// Situação especial (recuperação judicial, falência, etc.).
+    pub situacao_especial: Option<&'a str>,
+    /// Data da ocorrência da situação especial (YYYYMMDD).
+    pub data_situacao_especial: Option<u32>,
 }
 
 impl<'a> Estabelecimento<'a> {
     /// Faz o parsing e a validação estrita de uma linha CSV de Estabelecimento.
+    ///
+    /// ### Parâmetros
+    /// - `line`: Fatia bruta de bytes referente a uma linha do arquivo CSV de Estabelecimentos.
+    ///
+    /// ### Retorno
+    /// Instância validada de `Estabelecimento<'a>` contendo referências zero-copy.
+    ///
+    /// ### Erros
+    /// - `ErroCampo::CamposInsuficientes`: Se a linha contiver menos de 30 colunas delimitadas por `;`.
+    /// - `ErroCampo::CnpjInvalido`: Se as fatias do CNPJ violarem os tamanhos ou padrão alfanumérico.
+    /// - `ErroCampo::NumeroInvalido`: Se campos inteiros ou datas falharem na conversão numérica.
+    /// - `ErroCampo::TextoInvalido`: Se os campos textuais não forem UTF-8 válidos.
     pub fn parse_line(line: &'a [u8]) -> Result<Self, ErroCampo> {
         let mut campos: [&'a [u8]; 30] = [&[]; 30];
         let mut indice_campo: usize = 0;

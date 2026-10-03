@@ -67,8 +67,14 @@ flowchart TD
 ### A. Camada de Orquestração (`orchestrator/cnpydge/`)
 - **`crawler.py`:** Consulta o repositório WebDAV da Receita Federal via HTTP `PROPFIND`, cataloga arquivos disponíveis, extrai metadados (`Content-Length`, `Last-Modified`) e mapeia prefixos para tabelas canônicas.
 - **`downloader.py`:** Executa downloads atômicos e concorrentes via `httpx.Client`, gerenciando arquivos parciais `.part` e implementando retentativas com cabeçalho `Range`.
+- **`pipeline/`:** Módulo de esteira integrada com arquitetura limpa e inversão de dependência:
+  - `rfb_pipeline_orchestrator.py`: Coordena a esteira unitária sequencial de ponta a ponta.
+  - `checkpoint_manifest_store.py`: Persistência atômica em JSON do estado e telemetria de cada partição.
+  - `zip_archive_extractor.py`: Descompressão atômica de arquivos compactados da RFB.
+  - `disk_cleanup_policy.py`: Governança de expurgo imediato (*Rolling Eviction*) por perfil de retenção.
+  - `partition_models.py` & `pipeline_contracts.py`: Entidades de domínio declarativas e protocolos abstratos.
 - **`logging.py`:** Padroniza a telemetria com saída colorida no console e formatação RFC 3339.
-- **`__init__.py`:** Expõe a API pública e executa pré-validações de integridade de arquivos e tipos de tabelas antes de invocar a extensão nativa.
+- **`__init__.py`:** Expõe a API pública unificada (`run_pipeline`, `to_parquet`), tipos de domínio e validações preliminares.
 
 ### B. Fronteira FFI (`engine/src/lib.rs`)
 - Compila a crate Rust como biblioteca dinâmica CPython (`_core`).
@@ -84,4 +90,5 @@ flowchart TD
 1. **Sem bloqueio de GIL:** Toda operação de leitura, parsing e escrita que exceda 1ms deve ocorrer fora da GIL do Python.
 2. **Memória de I/O Desacoplada da RAM:** O consumo de memória RAM na leitura não escala com o tamanho do arquivo fonte (garantido por `mmap` e streaming HTTP em blocos de 1 MB).
 3. **Formatos Imutáveis e Fortemente Tipados:** Arquivos intermediários utilizam `.part` e a saída analítica final é exclusivamente Apache Parquet com esquema Arrow explícito.
+4. **Retenção Minimizada de Armazenamento:** A esteira unitária descarta arquivos compactados e CSVs intermediários de forma síncrona pós-conversão, mantendo a pegada em disco restrita a ~2-3 GB no perfil padrão.
 

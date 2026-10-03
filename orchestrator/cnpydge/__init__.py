@@ -9,6 +9,13 @@ from cnpydge._core import version
 from cnpydge.crawler import RemoteFileMetadata, WebDavCrawler
 from cnpydge.downloader import download_file, download_files_concurrently
 from cnpydge.logging import get_logger, setup_logging
+from cnpydge.pipeline import (
+    DiskRetentionProfile,
+    PartitionProcessingRecord,
+    RfbPartitionStage,
+    RfbPipelineOrchestrator,
+    RfbTablePartition,
+)
 
 type TableKindStr = Literal[
     "empresas",
@@ -24,12 +31,18 @@ type TableKindStr = Literal[
 ]
 
 __all__: list[str] = [
+    "DiskRetentionProfile",
+    "PartitionProcessingRecord",
     "RemoteFileMetadata",
+    "RfbPartitionStage",
+    "RfbPipelineOrchestrator",
+    "RfbTablePartition",
     "TableKindStr",
     "WebDavCrawler",
     "download_file",
     "download_files_concurrently",
     "get_logger",
+    "run_pipeline",
     "setup_logging",
     "to_parquet",
     "version",
@@ -145,3 +158,35 @@ def to_parquet(
         dst_bytes,
     )
     return total_rows
+
+
+def run_pipeline(
+    output_dir: str | Path,
+    tables: list[str] | None = None,
+    profile: DiskRetentionProfile = DiskRetentionProfile.BALANCED_ROLLING_EVICTION,
+    base_url: str = "https://dadosabertos.rfb.gov.br/CNPJ/",
+    max_partitions: int | None = None,
+) -> list[PartitionProcessingRecord]:
+    """Executa a esteira unificada de ingestão, extração e conversão dos dados da RFB.
+
+    Args:
+        output_dir: Diretório de destino final dos arquivos Parquet gerados.
+        tables: Lista de tabelas canônicas a filtrar (ex.: ['empresas', 'socios']).
+            Se None, processa todas as tabelas encontradas.
+        profile: Perfil de retenção de armazenamento em disco temporário.
+            O padrão é BALANCED_ROLLING_EVICTION (baixa, extrai, converte e expurga).
+        base_url: URL base do repositório de dados abertos da Receita Federal.
+        max_partitions: Limite opcional de partições a processar (útil para testes).
+
+    Returns:
+        Lista com os registros de auditoria de cada partição processada.
+    """
+    orchestrator = RfbPipelineOrchestrator(
+        output_directory=output_dir,
+        retention_profile=profile,
+    )
+    return orchestrator.run_pipeline(
+        base_url=base_url,
+        table_filter=tables,
+        max_partitions=max_partitions,
+    )

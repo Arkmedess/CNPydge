@@ -89,8 +89,9 @@ class WebDavCrawler:
             token: Token de compartilhamento público.
             client: Instância opcional de httpx.Client (para injeção em testes).
         """
-        self.base_url: str = (base_url or os.getenv("CNPYDGE_WEBDAV_URL", "")).rstrip("/")
-        self.token: str = token or os.getenv("CNPYDGE_WEBDAV_TOKEN", "")
+        env_base_url: str = os.getenv("CNPYDGE_WEBDAV_URL") or ""
+        self.base_url: str = (base_url or env_base_url).rstrip("/")
+        self.token: str = token or os.getenv("CNPYDGE_WEBDAV_TOKEN") or ""
         self.auth: tuple[str, str] | None = (self.token, "") if self.token else None
 
         self._managed_client: bool = client is None
@@ -188,6 +189,50 @@ class WebDavCrawler:
             max_file_size=max_file_size,
         )
 
+    def catalog(
+        self,
+        base_url: str | None = None,
+        pattern: str = "*.zip",
+        period: str | None = None,
+    ) -> list[RemoteFileMetadata]:
+        """Descobre e cataloga arquivos do repositório WebDAV.
+
+        Args:
+            base_url: URL base opcional para sobrescrever o endpoint configurado.
+            pattern: Padrão glob de arquivos a incluir (padrão: '*.zip').
+            period: Período específico no formato YYYY-MM. Se omitido, utiliza o mais recente.
+
+        Returns:
+            Lista de metadados dos arquivos remotos identificados.
+        """
+        if base_url:
+            self.base_url = base_url.rstrip("/")
+
+        target_period = period
+        if not target_period:
+            periods = self.list_available_periods()
+            if periods:
+                target_period = periods[0]
+
+        if target_period:
+            return self.list_files_by_period(target_period, include_patterns=[pattern])
+
+        url = f"{self.base_url}/"
+        LOGGER.info("Consultando arquivos na raiz do WebDAV: %s", url)
+        try:
+            response = self.client.request(
+                "PROPFIND",
+                url,
+                auth=self.auth,
+                headers={"Depth": "1"},
+            )
+            response.raise_for_status()
+            files = self._parse_webdav_response(response.text, period="")
+            return self._apply_filters(files, include_patterns=[pattern])
+        except (httpx.HTTPStatusError, httpx.RequestError) as err:
+            LOGGER.error("Falha ao catalogar arquivos na raiz do WebDAV (%s): %s", url, err)
+            return []
+
     def _parse_webdav_response(
         self,
         xml_content: str,
@@ -233,7 +278,7 @@ class WebDavCrawler:
                 else 0
             )
 
-            file_url = f"{self.base_url}/{period}/{name}"
+            file_url = f"{self.base_url}/{period}/{name}" if period else f"{self.base_url}/{name}"
             files.append(
                 RemoteFileMetadata(
                     name=name,

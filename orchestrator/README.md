@@ -35,9 +35,23 @@ class WebDavCrawler:
 ### D. Logging Estruturado (`cnpydge.logging`)
 - `setup_logging(level, log_to_file, log_dir, colored)`: Configura formatação consistente com timestamp RFC 3339 e níveis coloridos.
 
+### E. Esteira Unitária Integrada (`cnpydge.run_pipeline` e `cnpydge.pipeline`)
+```python
+def run_pipeline(
+    output_dir: str | Path,
+    tables: list[str] | None = None,
+    profile: DiskRetentionProfile = DiskRetentionProfile.BALANCED_ROLLING_EVICTION,
+    base_url: str = "https://dadosabertos.rfb.gov.br/CNPJ/",
+    max_partitions: int | None = None,
+) -> list[PartitionProcessingRecord]: ...
+```
+- Orquestra o ciclo de vida completo: descoberta remota via WebDAV, download temporário, extração atômica de ZIPs, conversão colunar via motor nativo Rust e descarte imediato (*Rolling Eviction*).
+- Garante retenção de disco mínima (~2-3 GB no pico com perfil `BALANCED_ROLLING_EVICTION`) e tolerância a falhas com retomada idempotente via manifesto de checkpoints (`JsonCheckpointManifestStore`).
+
 ## 3. Invariantes Operacionais
 1. **Atomicidade de Downloads:** O arquivo só é promovido de `.part` para a extensão definitiva após validação do `Content-Length`.
-2. **Isolamento de Memória:** O streaming HTTP não carrega arquivos completos na memória principal do Python.
+2. **Isolamento de Memória:** O streaming HTTP e a descompressão não carregam arquivos completos na memória principal do Python.
+3. **Consistência de Estado:** O pipeline registra o ciclo de vida de cada partição (`PENDING_DOWNLOAD` -> `DOWNLOAD_COMPLETED` -> `EXTRACTION_COMPLETED` -> `CONVERSION_COMPLETED`) antes e depois do expurgo em disco.
 
 ## 4. Dependências
 - **`httpx >= 0.27.0`:** Cliente HTTP robusto para streaming e requisições WebDAV com suporte a pooling de conexões e timeouts configuráveis.

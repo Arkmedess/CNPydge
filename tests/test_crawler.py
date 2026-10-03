@@ -196,3 +196,113 @@ def test_crawler_filter_exclude_and_max_size() -> None:
     assert len(small_files) == 1
     assert small_files[0].name == "leiame.txt"
     crawler.close()
+
+
+def test_crawler_catalog_auto_discovers_latest_period() -> None:
+    """Prevenção de bug: Valida catalog() com seleção automática do período mais recente."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url_str = str(request.url)
+        if url_str.rstrip("/").endswith("/webdav"):
+            return httpx.Response(200, text=SAMPLE_ROOT_PROPFIND)
+        if "2026-03" in url_str:
+            return httpx.Response(200, text=SAMPLE_PERIOD_PROPFIND)
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+    with WebDavCrawler(base_url="https://example.com/webdav", token="token-pub", client=client) as crawler:
+        files = crawler.catalog(pattern="*.zip")
+        assert len(files) == 2
+        assert all(f.is_zip for f in files)
+        assert files[0].name == "Empresas0.zip"
+
+
+def test_crawler_catalog_with_explicit_period() -> None:
+    """Garante que catalog(period=...) utilize o período especificado sem listar períodos."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "2026-03" in str(request.url)
+        return httpx.Response(200, text=SAMPLE_PERIOD_PROPFIND)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+    with WebDavCrawler(base_url="https://example.com/webdav", client=client) as crawler:
+        files = crawler.catalog(period="2026-03", pattern="*Estabelecimentos*")
+        assert len(files) == 1
+        assert files[0].name == "Estabelecimentos0.zip"
+
+
+def test_crawler_catalog_fallback_to_root_when_no_periods() -> None:
+    """Cenário não-corriqueiro: Quando não há pastas YYYY-MM, catalog() lista diretamente a raiz."""
+    root_files_xml = """<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/public.php/webdav/</d:href>
+    <d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/public.php/webdav/EmpresasDireto.zip</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:getcontentlength>50000</d:getcontentlength>
+        <d:resourcetype/>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=root_files_xml)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+    with WebDavCrawler(base_url="https://example.com/webdav", client=client) as crawler:
+        files = crawler.catalog(pattern="*.zip")
+        assert len(files) == 1
+        assert files[0].name == "EmpresasDireto.zip"
+        assert files[0].size_bytes == 50000
+
+
+def test_crawler_catalog_with_base_url_override() -> None:
+    """Garante que a passagem de base_url em catalog() atualize o endpoint do crawler."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "novoprovider.gov.br" in str(request.url)
+        return httpx.Response(200, text=SAMPLE_ROOT_PROPFIND)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+    with WebDavCrawler(base_url="https://antigo.gov.br", client=client) as crawler:
+        crawler.catalog(base_url="https://novoprovider.gov.br/dados")
+        assert crawler.base_url == "https://novoprovider.gov.br/dados"
+
+
+def test_crawler_handles_malformed_file_size_in_xml() -> None:
+    """Prevenção de bug: getcontentlength com texto inválido deve assumir 0 bytes sem crash."""
+    xml_with_invalid_size = """<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/public.php/webdav/2026-03/ArquivoTamanhoInvalido.zip</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:getcontentlength>NÃO_NUMÉRICO</d:getcontentlength>
+        <d:resourcetype/>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=xml_with_invalid_size)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport)
+    with WebDavCrawler(base_url="https://example.com/webdav", client=client) as crawler:
+        files = crawler.list_files_by_period("2026-03")
+        assert len(files) == 1
+        assert files[0].name == "ArquivoTamanhoInvalido.zip"
+        assert files[0].size_bytes == 0
+

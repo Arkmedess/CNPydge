@@ -181,3 +181,67 @@ def test_public_run_pipeline_wrapper(tmp_path: Path) -> None:
             table_filter=["empresas"],
             max_partitions=2,
         )
+
+
+def test_orchestrator_sequential_multiple_partitions_end_to_end(
+    tmp_path: Path,
+    sample_empresa_csv_content: str,
+    sample_socio_csv_content: str,
+) -> None:
+    """Prevenção de bug: Valida execução sequencial de múltiplas partições, descarte e retomada idempotente."""
+    output_dir = tmp_path / "output_parquet"
+    work_dir = tmp_path / "work_temp"
+    storage_dir = tmp_path / "remote_storage"
+    storage_dir.mkdir(parents=True)
+
+    # Cria dois arquivos ZIP sintéticos representando arquivos no WebDAV/HTTP
+    emp_zip = storage_dir / "Empresas0.zip"
+    with zipfile.ZipFile(emp_zip, "w") as zf:
+        zf.writestr("Empresas0.csv", sample_empresa_csv_content)
+
+    soc_zip = storage_dir / "Socios0.zip"
+    with zipfile.ZipFile(soc_zip, "w") as zf:
+        zf.writestr("Socios0.csv", sample_socio_csv_content)
+
+    def mock_downloader(url: str, dest: Path) -> Path:
+        source_name = Path(url).name
+        dest.write_bytes((storage_dir / source_name).read_bytes())
+        return dest
+
+    mock_crawler = MagicMock()
+    mock_crawler.catalog.return_value = [
+        RemoteFileMetadata(name="Empresas0.zip", url="https://mock/Empresas0.zip", size_bytes=emp_zip.stat().st_size),
+        RemoteFileMetadata(name="Socios0.zip", url="https://mock/Socios0.zip", size_bytes=soc_zip.stat().st_size),
+    ]
+
+    orchestrator = RfbPipelineOrchestrator(
+        output_directory=output_dir,
+        working_directory=work_dir,
+        downloader_fn=mock_downloader,
+        crawler=mock_crawler,
+    )
+
+    # 1. Primeira execução: processa ambas as partições
+    records = orchestrator.run_pipeline()
+    assert len(records) == 2
+    assert all(r.stage == RfbPartitionStage.CONVERSION_COMPLETED for r in records)
+
+    # Invariante: arquivos Parquet gerados existem no destino
+    emp_parquet = output_dir / "empresas0.parquet"
+    soc_parquet = output_dir / "socios0.parquet"
+    assert emp_parquet.is_file()
+    assert soc_parquet.is_file()
+    assert emp_parquet.read_bytes()[:4] == b"PAR1"
+    assert soc_parquet.read_bytes()[:4] == b"PAR1"
+
+    # Invariante: Rolling Eviction - nenhum ZIP ou CSV intermediário permanece no diretório de trabalho
+    assert not (work_dir / "Empresas0.zip").exists()
+    assert not (work_dir / "Empresas0.csv").exists()
+    assert not (work_dir / "Socios0.zip").exists()
+    assert not (work_dir / "Socios0.csv").exists()
+
+    # 2. Segunda execução (Idempotência): ambas devem ser ignoradas pois já estão no manifesto
+    second_records = orchestrator.run_pipeline()
+    assert len(second_records) == 2
+    assert all(r.stage == RfbPartitionStage.CONVERSION_COMPLETED for r in second_records)
+

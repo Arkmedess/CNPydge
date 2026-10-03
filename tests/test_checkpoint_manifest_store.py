@@ -88,3 +88,25 @@ def test_checkpoint_store_failed_stage(tmp_path: Path) -> None:
 
     assert store.get_partition_stage("Socios0.zip") == RfbPartitionStage.PROCESSING_FAILED
     assert not store.is_partition_completed("Socios0.zip")
+
+
+def test_checkpoint_store_creates_deep_nested_directories_automatically(tmp_path: Path) -> None:
+    """Prevenção de bug: Garante que diretórios aninhados inexistentes sejam criados automaticamente."""
+    nested_path = tmp_path / "level1" / "level2" / "checkpoints" / "manifest.json"
+    store = JsonCheckpointManifestStore(nested_path)
+
+    partition = RfbTablePartition(
+        remote_filename="Cnaes.zip",
+        table_canonical_name="cnaes",
+        download_url="https://dadosabertos.rfb.gov.br/CNPJ/Cnaes.zip",
+    )
+    record = PartitionProcessingRecord(
+        partition=partition,
+        stage=RfbPartitionStage.CONVERSION_COMPLETED,
+        rows_converted=1200,
+    )
+    store.record_partition_progress(record)
+
+    assert nested_path.is_file()
+    assert store.is_partition_completed("Cnaes.zip")
+

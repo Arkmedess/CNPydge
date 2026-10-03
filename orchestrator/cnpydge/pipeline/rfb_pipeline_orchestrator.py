@@ -100,7 +100,10 @@ class RfbPipelineOrchestrator:
             return record
 
         except Exception as err:
-            LOGGER.error("[%s] [FALHA NA ESTEIRA] Motivo: %s", partition.remote_filename, err)
+            LOGGER.exception(
+                "[%s] [FALHA NA ESTEIRA]",
+                partition.remote_filename,
+            )
             record.stage = RfbPartitionStage.PROCESSING_FAILED
             record.error_message = str(err)
             self._checkpoint_store.record_partition_progress(record)
@@ -150,4 +153,8 @@ class RfbPipelineOrchestrator:
             res = self.process_partition(p)
             results.append(res)
 
+        LOGGER.info(
+            "Esteira de ingestão concluída: %d partições processadas com sucesso.",
+            len(results),
+        )
         return results

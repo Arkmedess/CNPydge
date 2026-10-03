@@ -115,14 +115,17 @@ class WebDavCrawler:
                 headers={"Depth": "1"},
             )
             response.raise_for_status()
-        except (httpx.HTTPStatusError, httpx.RequestError) as err:
-            LOGGER.error("Falha ao consultar períodos no WebDAV (%s): %s", url, err)
+        except (httpx.HTTPStatusError, httpx.RequestError):
+            LOGGER.exception(
+                "Falha ao consultar períodos no WebDAV (%s)",
+                url,
+            )
             return []
 
         try:
             root = ET.fromstring(response.text)
-        except ET.ParseError as err:
-            LOGGER.error("Falha de parsing XML ao listar períodos: %s", err)
+        except ET.ParseError:
+            LOGGER.exception("Falha de parsing XML ao listar períodos")
             return []
 
         periods: list[str] = []
@@ -176,8 +179,11 @@ class WebDavCrawler:
                 headers={"Depth": "1"},
             )
             response.raise_for_status()
-        except (httpx.HTTPStatusError, httpx.RequestError) as err:
-            LOGGER.error("Falha ao consultar arquivos do período '%s': %s", period, err)
+        except (httpx.HTTPStatusError, httpx.RequestError):
+            LOGGER.exception(
+                "Falha ao consultar arquivos do período '%s'",
+                period,
+            )
             return []
 
         file_list: list[RemoteFileMetadata] = self._parse_webdav_response(response.text, period)
@@ -229,8 +235,11 @@ class WebDavCrawler:
             response.raise_for_status()
             files = self._parse_webdav_response(response.text, period="")
             return self._apply_filters(files, include_patterns=[pattern])
-        except (httpx.HTTPStatusError, httpx.RequestError) as err:
-            LOGGER.error("Falha ao catalogar arquivos na raiz do WebDAV (%s): %s", url, err)
+        except (httpx.HTTPStatusError, httpx.RequestError):
+            LOGGER.exception(
+                "Falha ao catalogar arquivos na raiz do WebDAV (%s)",
+                url,
+            )
             return []
 
     def _parse_webdav_response(
@@ -250,8 +259,8 @@ class WebDavCrawler:
         files: list[RemoteFileMetadata] = []
         try:
             root: ET.Element = ET.fromstring(xml_content)
-        except ET.ParseError as err:
-            LOGGER.error("XML inválido recebido do WebDAV: %s", err)
+        except ET.ParseError:
+            LOGGER.exception("XML inválido recebido do WebDAV")
             return []
 
         for resp in root.findall("d:response", DAV_NS):

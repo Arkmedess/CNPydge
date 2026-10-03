@@ -133,13 +133,12 @@ def to_parquet(
     start: float = time.perf_counter()
     try:
         total_rows = _core.to_parquet(str(src_path), str(dst_path), kind=table_name)
-    except Exception as err:
-        LOGGER.error(
-            "Falha no motor nativo ao converter '%s' -> '%s' [%s]: %s",
+    except Exception:
+        LOGGER.exception(
+            "Falha no motor nativo ao converter '%s' -> '%s' [%s]",
             src_path,
             dst_path,
             table_name,
-            err,
         )
         raise
 

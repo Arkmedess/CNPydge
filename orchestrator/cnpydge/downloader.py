@@ -67,8 +67,12 @@ def download_file(
                             dest_path,
                         )
                         return dest_path
-            except httpx.RequestError:
-                pass
+            except httpx.RequestError as err:
+                LOGGER.debug(
+                    "Falha na checagem HEAD prévia para '%s': %s. Prosseguindo com download.",
+                    url,
+                    err,
+                )
 
         # 2. Configura retomada parcial (HTTP Range)
         headers: dict[str, str] = {}
@@ -93,7 +97,11 @@ def download_file(
 
             is_partial: bool = response.status_code == 206
             if not is_partial and file_mode == "ab":
-                # Servidor não suportou Range; reinicia download do zero
+                LOGGER.warning(
+                    "Servidor remoto não atendeu HTTP Range (status %d) para '%s'. Reiniciando download do zero.",
+                    response.status_code,
+                    part_path.name,
+                )
                 file_mode = "wb"
                 downloaded_bytes = 0
 
@@ -183,8 +191,8 @@ def download_files_concurrently(
             try:
                 downloaded_path: Path = future.result()
                 results.append(downloaded_path)
-            except Exception as err:
-                LOGGER.error("Falha ao baixar '%s': %s", dst, err)
+            except Exception:
+                LOGGER.exception("Falha ao baixar '%s'", dst)
                 raise
 
     return results

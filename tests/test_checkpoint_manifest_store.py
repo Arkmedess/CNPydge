@@ -1,14 +1,30 @@
 """Testes unitários para o repositório de checkpoints do pipeline (JSON)."""
 
 import json
+import logging
 from pathlib import Path
 
+import pytest
 from cnpydge.pipeline.checkpoint_manifest_store import JsonCheckpointManifestStore
 from cnpydge.pipeline.partition_models import (
     PartitionProcessingRecord,
     RfbPartitionStage,
     RfbTablePartition,
 )
+
+
+def test_checkpoint_store_logs_warning_on_corrupted_json(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Verifica se JsonCheckpointManifestStore emite WARN ao encontrar JSON corrompido."""
+    corrupted_file = tmp_path / "corrupted_checkpoint.json"
+    corrupted_file.write_text("{arquivo_invalido_sem_fechar", encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING):
+        store = JsonCheckpointManifestStore(corrupted_file)
+        assert store.get_partition_stage("Empresas0.zip") == RfbPartitionStage.PENDING_DOWNLOAD
+
+    assert any("Manifesto de checkpoint corrompido" in record.message for record in caplog.records)
 
 
 def test_checkpoint_store_default_stage(tmp_path: Path) -> None:

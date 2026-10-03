@@ -30,7 +30,8 @@ O **CNPydge** resolve isso dividindo as responsabilidades: um motor nativo em Ru
 - **Conversão Direta para Parquet:** Gera arquivos colunares prontos para consulta instantânea em DuckDB, Polars, ClickHouse ou Pandas.
 - **I/O com Mapeamento de Memória:** Lê arquivos massivos delegando paginação ao sistema operacional, sem estourar o limite de RAM da máquina.
 - **Processamento Concorrente sem Bloqueio de GIL:** O motor em Rust opera em threads paralelas liberando totalmente o runtime do Python durante a ingestão pesada.
-- **Orquestração Descomplicada:** Utilitários em Python para download automatizado das tabelas da Receita (`Empresas`, `Estabelecimentos`, `Sócios`, etc.) e verificação de integridade.
+- **Esteira Unitária com Descarte Imediato (Rolling Eviction):** Processa e expurga arquivos temporários sob demanda, reduzindo a exigência de disco de ~70 GB para ~2 a 3 GB no pico.
+- **Orquestração Descomplicada:** Utilitários em Python para download automatizado das tabelas da Receita (`Empresas`, `Estabelecimentos`, `Sócios`, etc.), retomada via checkpoints e verificação de integridade.
 
 ## Estrutura do Repositório
 
@@ -42,6 +43,7 @@ CNPydge/
 │   └── README.md        # Documentação técnica do motor nativo
 ├── orchestrator/        # Pacote Python de orquestração (cnpydge)
 │   ├── cnpydge/         # Crawler WebDAV, streaming downloader e wrapper FFI
+│   │   └── pipeline/    # Esteira unitária, extração atômica, checkpoints e limpeza
 │   └── README.md        # Documentação da API Python e utilitários
 ├── docs/                # Documentação técnica e governança
 │   ├── adr/             # Registros de Decisão Arquitetural
@@ -64,6 +66,7 @@ Toda a narrativa técnica, decisões e especificações formais do projeto estã
   - [ADR-0003: Armazenamento Analítico Colunar em Parquet](docs/adr/0003-armazenamento-analitico-parquet.md)
   - [ADR-0004: Coleta Concorrente e Download Resumable via HTTP](docs/adr/0004-coleta-concorrente-e-download-resumable.md)
   - [ADR-0005: Suporte a CNPJ Alfanumérico e Coerção Estrita de Tipos](docs/adr/0005-cnpj-alfanumerico-e-coercao-de-tipos.md)
+  - [ADR-0006: Ingestão por Esteira Unitária e Perfis de Armazenamento](docs/adr/0006-esteira-unitaria-rolling-eviction.md)
 - **Módulos Locais:**
   - [Documentação do Motor Nativo em Rust](engine/README.md)
   - [Documentação do Orquestrador Python](orchestrator/README.md)
@@ -87,11 +90,14 @@ uv run python main.py
 ```python
 import cnpydge
 
-# 1. Descoberta de arquivos remotos via WebDAV
-crawler = cnpydge.WebDavCrawler()
-arquivos = crawler.catalog("https://dadosabertos.rfb.gov.br/CNPJ/", pattern="*Empresas*.zip")
+# 1. Ingestão de ponta a ponta com esteira unitária (baixo uso de disco ~2-3 GB)
+registros = cnpydge.run_pipeline(
+    output_dir="./dados_parquet",
+    tables=["empresas", "estabelecimentos"],
+    profile=cnpydge.DiskRetentionProfile.BALANCED_ROLLING_EVICTION,
+)
 
-# 2. Conversão nativa de alta vazão para Parquet (libera GIL)
+# 2. Conversão direta avulsa para Parquet (libera GIL)
 total = cnpydge.to_parquet("Empresas0.csv", "empresas.parquet", kind="empresas")
 print(f"Total de empresas convertidas: {total}")
 ```

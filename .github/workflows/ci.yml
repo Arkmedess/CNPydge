@@ -43,6 +43,9 @@ jobs:
       - name: Análise estática Rust (clippy)
         run: uv run cargo clippy --all-targets -- -D warnings
 
+      - name: Análise estática Python (ruff)
+        run: uv run ruff check .
+
   test:
     name: Testes Automatizados
     needs: lint-format
@@ -65,6 +68,12 @@ jobs:
 
       - name: Executar testes em Rust
         run: uv run cargo test --all-targets
+
+      - name: Compilar extensão nativa para testes Python
+        run: uv run --with maturin maturin develop
+
+      - name: Executar testes em Python com cobertura
+        run: uv run pytest --cov=cnpydge --cov-fail-under=80
 
   build:
     name: Build & Smoke Test

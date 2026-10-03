@@ -19,5 +19,8 @@ wheels/
 # Virtual environments
 .venv/
 
+# IDE and editors
+.vscode/
+
 # Rust-generated files
 target/

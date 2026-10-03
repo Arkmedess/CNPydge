@@ -4,11 +4,15 @@ import tempfile
 from pathlib import Path
 
 import cnpydge
+from cnpydge.logging import get_logger, setup_logging
+
+LOGGER = get_logger("cnpydge.main")
 
 
 def main() -> None:
     """Executa a verificação unificada do motor nativo para Empresas, Sócios e Estabelecimentos."""
-    print(f"CNPydge inicializado com sucesso! Versão do motor: {cnpydge.version()}")
+    setup_logging()
+    LOGGER.info("CNPydge inicializado com sucesso! Versão do motor: %s", cnpydge.version())
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         dir_path: Path = Path(tmp_dir)
@@ -25,8 +29,10 @@ def main() -> None:
         total_emp: int = cnpydge.to_parquet(
             str(emp_csv), str(emp_parquet), kind="empresas"
         )
-        print(
-            f"Empresas: {total_emp} linhas convertidas -> {emp_parquet.stat().st_size} bytes."
+        LOGGER.info(
+            "Empresas: %d linhas convertidas -> %d bytes.",
+            total_emp,
+            emp_parquet.stat().st_size,
         )
 
         # 2. Teste de Sócios
@@ -39,8 +45,10 @@ def main() -> None:
         total_soc: int = cnpydge.to_parquet(
             str(soc_csv), str(soc_parquet), kind="socios"
         )
-        print(
-            f"Sócios: {total_soc} linhas convertidas -> {soc_parquet.stat().st_size} bytes."
+        LOGGER.info(
+            "Sócios: %d linhas convertidas -> %d bytes.",
+            total_soc,
+            soc_parquet.stat().st_size,
         )
 
         # 3. Teste de Estabelecimentos
@@ -53,8 +61,10 @@ def main() -> None:
         total_est: int = cnpydge.to_parquet(
             str(est_csv), str(est_parquet), kind="estabelecimentos"
         )
-        print(
-            f"Estabelecimentos: {total_est} linhas convertidas -> {est_parquet.stat().st_size} bytes."
+        LOGGER.info(
+            "Estabelecimentos: %d linhas convertidas -> %d bytes.",
+            total_est,
+            est_parquet.stat().st_size,
         )
 
         # 4. Teste de Simples Nacional / MEI
@@ -67,8 +77,10 @@ def main() -> None:
         total_sim: int = cnpydge.to_parquet(
             str(simp_csv), str(simp_parquet), kind="simples"
         )
-        print(
-            f"Simples: {total_sim} linhas convertidas -> {simp_parquet.stat().st_size} bytes."
+        LOGGER.info(
+            "Simples: %d linhas convertidas -> %d bytes.",
+            total_sim,
+            simp_parquet.stat().st_size,
         )
 
         # 5. Teste de Tabelas de Domínio (CNAEs e Municípios)
@@ -81,8 +93,10 @@ def main() -> None:
         total_cnae: int = cnpydge.to_parquet(
             str(cnae_csv), str(cnae_parquet), kind="cnaes"
         )
-        print(
-            f"CNAEs: {total_cnae} linhas convertidas -> {cnae_parquet.stat().st_size} bytes."
+        LOGGER.info(
+            "CNAEs: %d linhas convertidas -> %d bytes.",
+            total_cnae,
+            cnae_parquet.stat().st_size,
         )
 
         mun_csv: Path = dir_path / "municipios.csv"
@@ -91,8 +105,10 @@ def main() -> None:
         total_mun: int = cnpydge.to_parquet(
             str(mun_csv), str(mun_parquet), kind="municipios"
         )
-        print(
-            f"Municípios: {total_mun} linhas convertidas -> {mun_parquet.stat().st_size} bytes."
+        LOGGER.info(
+            "Municípios: %d linhas convertidas -> %d bytes.",
+            total_mun,
+            mun_parquet.stat().st_size,
         )
 
 

@@ -32,8 +32,12 @@ class WebDavCrawler:
 - `download_file(...) -> Path`: Executa o download atômico em blocos de 1 MB, suportando retomada via cabeçalho HTTP `Range` caso exista um arquivo temporário `.part`.
 - `download_files_concurrently(...) -> list[Path]`: Coordena o download em paralelo de múltiplos arquivos utilizando `ThreadPoolExecutor`.
 
-### D. Logging Estruturado (`cnpydge.logging`)
-- `setup_logging(level, log_to_file, log_dir, colored)`: Configura formatação consistente com timestamp RFC 3339 e níveis coloridos.
+### D. Logging Estruturado e Observabilidade (`cnpydge.logging`)
+- `setup_logging(level=None, handler=None, json_format=None, log_to_file=False, log_dir=None)`:
+  - Configura formatação consistente com timestamp RFC 3339 UTC (`Z`) e identificador de thread `[threadName]`.
+  - Suporte opcional a eventos JSON estruturados via parâmetro `json_format=True` ou variável de ambiente `CNPYDGE_LOG_FORMAT=json`.
+  - Sanitização ativa contra vazamento de credenciais em URLs (`user:pass@`), tokens Bearer e documentos sensíveis via `SensitiveDataFilter`.
+  - Suporte a persistência em disco com rotação (`RotatingFileHandler` de 10 MB e 5 backups) quando `log_to_file=True`.
 
 ### E. Esteira Unitária Integrada (`cnpydge.run_pipeline` e `cnpydge.pipeline`)
 ```python
@@ -54,7 +58,7 @@ def run_pipeline(
 3. **Consistência de Estado:** O pipeline registra o ciclo de vida de cada partição (`PENDING_DOWNLOAD` -> `DOWNLOAD_COMPLETED` -> `EXTRACTION_COMPLETED` -> `CONVERSION_COMPLETED`) antes e depois do expurgo em disco.
 
 ## 4. Dependências
-- **`httpx >= 0.27.0`:** Cliente HTTP robusto para streaming e requisições WebDAV com suporte a pooling de conexões e timeouts configuráveis.
+- **`httpx >= 0.27.0`:** Cliente HTTP para streaming e requisições WebDAV com suporte a pooling de conexões e timeouts configuráveis.
 
 ## 5. Testes e Cobertura
 - **Execução dos testes:** `uv run pytest --cov=cnpydge`

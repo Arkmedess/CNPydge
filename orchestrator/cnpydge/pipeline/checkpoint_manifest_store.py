@@ -4,10 +4,13 @@ import json
 from pathlib import Path
 from typing import Any
 
+from cnpydge.logging import get_logger
 from cnpydge.pipeline.partition_models import (
     PartitionProcessingRecord,
     RfbPartitionStage,
 )
+
+LOGGER = get_logger("cnpydge.pipeline.checkpoint")
 
 
 class JsonCheckpointManifestStore:
@@ -27,13 +30,23 @@ class JsonCheckpointManifestStore:
         if self._path.is_file():
             try:
                 return json.loads(self._path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError) as err:
+                LOGGER.warning(
+                    "Manifesto de checkpoint corrompido ou inacessível em '%s': %s. Reiniciando estado em memória.",
+                    self._path,
+                    err,
+                )
                 return {}
         return {}
 
     def _persist(self) -> None:
         """Grava o estado atual de forma atômica utilizando um arquivo temporário."""
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        LOGGER.debug(
+            "Persistindo manifesto de checkpoint com %d partições em '%s'.",
+            len(self._state),
+            self._path,
+        )
         tmp_file = self._path.with_suffix(".tmp")
         tmp_file.write_text(json.dumps(self._state, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp_file.replace(self._path)

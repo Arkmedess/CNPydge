@@ -1,8 +1,7 @@
 //! Representação e validação com tipagem forte dos registros da tabela de Sócios do CNPJ.
 
 use crate::util::{
-    ErroCampo, clean_quotes, opt_str, parse_opt_u16, parse_u8, parse_u16, parse_u32,
-    split_csv_line,
+    ErroCampo, clean_quotes, opt_str, parse_opt_u16, parse_u8, parse_u16, parse_u32, split_csv_line,
 };
 use std::str;
 

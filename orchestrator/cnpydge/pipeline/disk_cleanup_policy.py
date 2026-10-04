@@ -9,20 +9,23 @@ from cnpydge.pipeline.pipeline_contracts import DiskCleanupPolicy
 LOGGER = get_logger("cnpydge.pipeline.cleanup")
 
 
+def _unlink_and_log(path: Path, log_template: str) -> None:
+    """Remove o arquivo e registra a ocorrência no logger."""
+    if path.exists():
+        path.unlink(missing_ok=True)
+        LOGGER.info(log_template, path.name)
+
+
 class BalancedRollingEvictionPolicy:
     """Esteira unitária: remove o ZIP após extração e o CSV após conversão Parquet."""
 
     def cleanup_downloaded_zip(self, downloaded_zip_path: Path) -> None:
         """Exclui o arquivo compactado imediatamente para liberar espaço no disco."""
-        if downloaded_zip_path.exists():
-            downloaded_zip_path.unlink()
-            LOGGER.info("Arquivo compactado descartado [Rolling Eviction]: '%s'", downloaded_zip_path.name)
+        _unlink_and_log(downloaded_zip_path, "Arquivo compactado descartado [Rolling Eviction]: '%s'")
 
     def cleanup_extracted_csv(self, extracted_csv_path: Path) -> None:
         """Exclui o CSV intermediário imediatamente após a conversão."""
-        if extracted_csv_path.exists():
-            extracted_csv_path.unlink()
-            LOGGER.info("CSV intermediário descartado [Rolling Eviction]: '%s'", extracted_csv_path.name)
+        _unlink_and_log(extracted_csv_path, "CSV intermediário descartado [Rolling Eviction]: '%s'")
 
 
 class ArchivalPermanentZipPolicy:
@@ -34,9 +37,7 @@ class ArchivalPermanentZipPolicy:
 
     def cleanup_extracted_csv(self, extracted_csv_path: Path) -> None:
         """Descarta o CSV temporário pois os dados já foram persistidos em Parquet."""
-        if extracted_csv_path.exists():
-            extracted_csv_path.unlink()
-            LOGGER.info("CSV intermediário descartado [Archival]: '%s'", extracted_csv_path.name)
+        _unlink_and_log(extracted_csv_path, "CSV intermediário descartado [Archival]: '%s'")
 
 
 class PerformanceBatchRetainPolicy:

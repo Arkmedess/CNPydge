@@ -572,66 +572,41 @@ fn build_simples(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>
     Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
 }
 
-fn build_dominio_u32(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
-    let mut cod_b = UInt32Builder::new();
-    let mut desc_b = StringBuilder::new();
+macro_rules! build_dominio_batch {
+    ($slice:expr, $schema:expr, $builder_type:ty, $dom_type:ty) => {{
+        let mut cod_b = <$builder_type>::new();
+        let mut desc_b = StringBuilder::new();
+        let mut row_count = 0;
 
-    let mut row_count = 0;
-    for line in slice.split(|&b| b == b'\n') {
-        let line = if line.ends_with(b"\r") {
-            &line[..line.len() - 1]
-        } else {
-            line
-        };
-        if line.is_empty() {
-            continue;
+        for line in $slice.split(|&b| b == b'\n') {
+            let line = line.strip_suffix(b"\r").unwrap_or(line);
+            if line.is_empty() {
+                continue;
+            }
+
+            let Ok(dom) = Dominio::<$dom_type>::parse_line(line) else {
+                continue;
+            };
+            cod_b.append_value(dom.codigo);
+            desc_b.append_value(dom.descricao);
+            row_count += 1;
         }
 
-        let Ok(dom) = Dominio::<u32>::parse_line(line) else {
-            continue;
-        };
-        cod_b.append_value(dom.codigo);
-        desc_b.append_value(dom.descricao);
-        row_count += 1;
-    }
+        if row_count == 0 {
+            Ok(None)
+        } else {
+            let columns: Vec<ArrayRef> = vec![Arc::new(cod_b.finish()), Arc::new(desc_b.finish())];
+            Ok(Some(RecordBatch::try_new(Arc::clone($schema), columns)?))
+        }
+    }};
+}
 
-    if row_count == 0 {
-        return Ok(None);
-    }
-
-    let columns: Vec<ArrayRef> = vec![Arc::new(cod_b.finish()), Arc::new(desc_b.finish())];
-    Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
+fn build_dominio_u32(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
+    build_dominio_batch!(slice, schema, UInt32Builder, u32)
 }
 
 fn build_dominio_u16(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
-    let mut cod_b = UInt16Builder::new();
-    let mut desc_b = StringBuilder::new();
-
-    let mut row_count = 0;
-    for line in slice.split(|&b| b == b'\n') {
-        let line = if line.ends_with(b"\r") {
-            &line[..line.len() - 1]
-        } else {
-            line
-        };
-        if line.is_empty() {
-            continue;
-        }
-
-        let Ok(dom) = Dominio::<u16>::parse_line(line) else {
-            continue;
-        };
-        cod_b.append_value(dom.codigo);
-        desc_b.append_value(dom.descricao);
-        row_count += 1;
-    }
-
-    if row_count == 0 {
-        return Ok(None);
-    }
-
-    let columns: Vec<ArrayRef> = vec![Arc::new(cod_b.finish()), Arc::new(desc_b.finish())];
-    Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
+    build_dominio_batch!(slice, schema, UInt16Builder, u16)
 }
 
 #[inline]

@@ -109,9 +109,8 @@ class RfbPipelineOrchestrator:
             self._checkpoint_store.record_partition_progress(record)
 
             # Limpeza defensiva de artefatos temporários em caso de exceção
-            if downloaded_zip.exists():
-                downloaded_zip.unlink(missing_ok=True)
-            if extracted_csv and extracted_csv.exists():
+            downloaded_zip.unlink(missing_ok=True)
+            if extracted_csv is not None:
                 extracted_csv.unlink(missing_ok=True)
             raise
 
@@ -126,32 +125,22 @@ class RfbPipelineOrchestrator:
         remote_files = self._crawler.catalog(base_url)
 
         normalized_filter = {t.lower() for t in table_filter} if table_filter else None
-        partitions: list[RfbTablePartition] = []
-
-        for rf in remote_files:
-            if not rf.table_kind:
-                continue
-            if normalized_filter and rf.table_kind.lower() not in normalized_filter:
-                continue
-
-            partitions.append(
-                RfbTablePartition(
-                    remote_filename=rf.name,
-                    table_canonical_name=rf.table_kind,
-                    download_url=rf.url,
-                    size_bytes=rf.size_bytes or 0,
-                )
+        partitions: list[RfbTablePartition] = [
+            RfbTablePartition(
+                remote_filename=rf.name,
+                table_canonical_name=rf.table_kind,
+                download_url=rf.url,
+                size_bytes=rf.size_bytes or 0,
             )
+            for rf in remote_files
+            if rf.table_kind and (not normalized_filter or rf.table_kind.lower() in normalized_filter)
+        ]
 
         if max_partitions:
             partitions = partitions[:max_partitions]
 
         LOGGER.info("Total de partições selecionadas para ingestão: %d", len(partitions))
-        results: list[PartitionProcessingRecord] = []
-
-        for p in partitions:
-            res = self.process_partition(p)
-            results.append(res)
+        results: list[PartitionProcessingRecord] = [self.process_partition(p) for p in partitions]
 
         LOGGER.info(
             "Esteira de ingestão concluída: %d partições processadas com sucesso.",

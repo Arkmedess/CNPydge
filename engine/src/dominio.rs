@@ -12,19 +12,11 @@ pub struct Dominio<'a, T> {
 
 #[inline]
 fn split_two_fields(line: &[u8]) -> Result<(&[u8], &[u8]), ErroCampo> {
-    let line = if line.ends_with(b"\r") {
-        &line[..line.len() - 1]
-    } else {
-        line
-    };
-    let mut pos = None;
-    for (i, &b) in line.iter().enumerate() {
-        if b == b';' {
-            pos = Some(i);
-            break;
-        }
-    }
-    let p = pos.ok_or(ErroCampo::CamposInsuficientes)?;
+    let line = line.strip_suffix(b"\r").unwrap_or(line);
+    let p = line
+        .iter()
+        .position(|&b| b == b';')
+        .ok_or(ErroCampo::CamposInsuficientes)?;
     Ok((&line[..p], &line[p + 1..]))
 }
 

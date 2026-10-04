@@ -9,7 +9,7 @@ Construído com **Rust** e **Python**
 [![CI](https://img.shields.io/github/actions/workflow/status/Arkmedess/CNPydge/ci.yml?style=for-the-badge&label=CI&labelColor=1a1b26&color=7aa2f7)](https://github.com/Arkmedess/CNPydge/actions)
 [![Python](https://img.shields.io/badge/Python-3.13+-3776AB?style=for-the-badge&logo=python&logoColor=white&labelColor=1a1b26)](https://www.python.org/)
 [![Rust](https://img.shields.io/badge/Rust-2024_Edition-DEA584?style=for-the-badge&logo=rust&logoColor=white&labelColor=1a1b26)](https://www.rust-lang.org/)
-[![Coverage](https://img.shields.io/badge/Coverage-94%25-9ece6a?style=for-the-badge&logo=pytest&logoColor=white&labelColor=1a1b26)](tests/)
+[![Coverage](https://img.shields.io/badge/Coverage-96%25-9ece6a?style=for-the-badge&logo=pytest&logoColor=white&labelColor=1a1b26)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-9ece6a?style=for-the-badge&labelColor=1a1b26)](LICENSE)
 
 </div>

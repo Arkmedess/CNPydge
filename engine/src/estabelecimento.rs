@@ -2,6 +2,7 @@
 
 use crate::util::{
     ErroCampo, clean_quotes, opt_str, parse_opt_u16, parse_opt_u32, parse_u8, parse_u16, parse_u32,
+    split_csv_line,
 };
 
 /// Registro validado e fortemente tipado de um Estabelecimento da Receita Federal.
@@ -84,35 +85,7 @@ impl<'a> Estabelecimento<'a> {
     /// - `ErroCampo::NumeroInvalido`: Se campos inteiros ou datas falharem na conversão numérica.
     /// - `ErroCampo::TextoInvalido`: Se os campos textuais não forem UTF-8 válidos.
     pub fn parse_line(line: &'a [u8]) -> Result<Self, ErroCampo> {
-        let mut campos: [&'a [u8]; 30] = [&[]; 30];
-        let mut indice_campo: usize = 0;
-        let mut inicio: usize = 0;
-        let mut em_aspas: bool = false;
-
-        for (i, &byte) in line.iter().enumerate() {
-            if byte == b'"' {
-                em_aspas = !em_aspas;
-            } else if byte == b';' && !em_aspas {
-                if indice_campo < 30 {
-                    campos[indice_campo] = &line[inicio..i];
-                    indice_campo += 1;
-                }
-                inicio = i + 1;
-            }
-        }
-
-        if indice_campo < 30 && inicio <= line.len() {
-            let mut fim: usize = line.len();
-            while fim > inicio && (line[fim - 1] == b'\n' || line[fim - 1] == b'\r') {
-                fim -= 1;
-            }
-            campos[indice_campo] = &line[inicio..fim];
-            indice_campo += 1;
-        }
-
-        if indice_campo != 30 {
-            return Err(ErroCampo::CamposInsuficientes);
-        }
+        let campos: [&'a [u8]; 30] = split_csv_line::<30>(line)?;
 
         let cnpj_basico: &'a [u8] = clean_quotes(campos[0]);
         if cnpj_basico.len() != 8 || !cnpj_basico.iter().all(|b: &u8| b.is_ascii_alphanumeric()) {

@@ -2,6 +2,7 @@
 
 use crate::util::{
     ErroCampo, clean_quotes, opt_str, parse_opt_u16, parse_u8, parse_u16, parse_u32,
+    split_csv_line,
 };
 use std::str;
 
@@ -47,35 +48,7 @@ impl<'a> Socio<'a> {
     /// - `ErroCampo::NumeroInvalido`: Se tipos numéricos ou datas falharem na conversão.
     /// - `ErroCampo::TextoInvalido`: Se strings e documentos não forem UTF-8 válidos.
     pub fn parse_line(line: &'a [u8]) -> Result<Self, ErroCampo> {
-        let mut campos: [&'a [u8]; 11] = [&[]; 11];
-        let mut indice_campo: usize = 0;
-        let mut inicio: usize = 0;
-        let mut em_aspas: bool = false;
-
-        for (i, &byte) in line.iter().enumerate() {
-            if byte == b'"' {
-                em_aspas = !em_aspas;
-            } else if byte == b';' && !em_aspas {
-                if indice_campo < 11 {
-                    campos[indice_campo] = &line[inicio..i];
-                    indice_campo += 1;
-                }
-                inicio = i + 1;
-            }
-        }
-
-        if indice_campo < 11 && inicio <= line.len() {
-            let mut fim: usize = line.len();
-            while fim > inicio && (line[fim - 1] == b'\n' || line[fim - 1] == b'\r') {
-                fim -= 1;
-            }
-            campos[indice_campo] = &line[inicio..fim];
-            indice_campo += 1;
-        }
-
-        if indice_campo != 11 {
-            return Err(ErroCampo::CamposInsuficientes);
-        }
+        let campos: [&'a [u8]; 11] = split_csv_line::<11>(line)?;
 
         let cnpj_raw: &'a [u8] = clean_quotes(campos[0]);
         if cnpj_raw.len() != 8 || !cnpj_raw.iter().all(|b: &u8| b.is_ascii_alphanumeric()) {

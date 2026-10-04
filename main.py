@@ -9,107 +9,70 @@ from cnpydge.logging import get_logger, setup_logging
 LOGGER = get_logger("cnpydge.main")
 
 
+DEMO_CASES: list[tuple[str, str, str]] = [
+    (
+        "empresas",
+        "empresas",
+        (
+            '"12345678";"EMPRESA ALFA LTDA";"2062";"49";"100000,00";"03";""\n'
+            '"87654321";"EMPRESA BETA S.A.";"2054";"10";"5000000,50";"05";"BRASILIA"\n'
+            '"12ABC345";"STARTUP INOVADORA LTDA";"2062";"49";"150000,00";"01";""\n'
+        ),
+    ),
+    (
+        "socios",
+        "socios",
+        '"12ABC345";"2";"MARIA SILVA";"***123456**";"49";"20200115";"";"***000000**";"JOSE SILVA";"05";"5"\n',
+    ),
+    (
+        "estabelecimentos",
+        "estabelecimentos",
+        (
+            '"12ABC345";"0001";"95";"1";"MATRIZ";"02";"20210510";"00";"";"";"20210510";"6201501";"";'
+            '"AVENIDA";"PAULISTA";"1000";"SALA 10";"BELA VISTA";"01310100";"SP";"7107";"11";"33334444";'
+            '"";"";"";"";"contato@empresa.com";"";""\n'
+        ),
+    ),
+    (
+        "simples",
+        "simples",
+        '"12ABC345";"S";"20200101";"20211231";"N";"";""\n',
+    ),
+    (
+        "cnaes",
+        "cnaes",
+        '"6201501";"DESENVOLVIMENTO DE PROGRAMAS DE COMPUTADOR SOB ENCOMENDA"\n',
+    ),
+    (
+        "municipios",
+        "municipios",
+        '"7107";"SAO PAULO"\n',
+    ),
+]
+
+
+def _demo_table(dir_path: Path, name: str, kind: str, sample_csv: str) -> None:
+    csv_file = dir_path / f"{name}.csv"
+    parquet_file = dir_path / f"{name}.parquet"
+    csv_file.write_text(sample_csv, encoding="utf-8")
+    rows = cnpydge.to_parquet(str(csv_file), str(parquet_file), kind=kind)
+    LOGGER.info(
+        "%s: %d linhas convertidas -> %d bytes.",
+        name.capitalize(),
+        rows,
+        parquet_file.stat().st_size,
+    )
+
+
 def main() -> None:
-    """Executa a verificação unificada do motor nativo para Empresas, Sócios e Estabelecimentos."""
+    """Executa a verificação unificada do motor nativo para as tabelas suportadas."""
     setup_logging()
     LOGGER.info("CNPydge inicializado com sucesso! Versão do motor: %s", cnpydge.version())
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        dir_path: Path = Path(tmp_dir)
-
-        # 1. Teste de Empresas
-        emp_csv: Path = dir_path / "empresas.csv"
-        emp_parquet: Path = dir_path / "empresas.parquet"
-        emp_csv.write_text(
-            '"12345678";"EMPRESA ALFA LTDA";"2062";"49";"100000,00";"03";""\n'
-            '"87654321";"EMPRESA BETA S.A.";"2054";"10";"5000000,50";"05";"BRASILIA"\n'
-            '"12ABC345";"STARTUP INOVADORA LTDA";"2062";"49";"150000,00";"01";""\n',
-            encoding="utf-8",
-        )
-        total_emp: int = cnpydge.to_parquet(
-            str(emp_csv), str(emp_parquet), kind="empresas"
-        )
-        LOGGER.info(
-            "Empresas: %d linhas convertidas -> %d bytes.",
-            total_emp,
-            emp_parquet.stat().st_size,
-        )
-
-        # 2. Teste de Sócios
-        soc_csv: Path = dir_path / "socios.csv"
-        soc_parquet: Path = dir_path / "socios.parquet"
-        soc_csv.write_text(
-            '"12ABC345";"2";"MARIA SILVA";"***123456**";"49";"20200115";"";"***000000**";"JOSE SILVA";"05";"5"\n',
-            encoding="utf-8",
-        )
-        total_soc: int = cnpydge.to_parquet(
-            str(soc_csv), str(soc_parquet), kind="socios"
-        )
-        LOGGER.info(
-            "Sócios: %d linhas convertidas -> %d bytes.",
-            total_soc,
-            soc_parquet.stat().st_size,
-        )
-
-        # 3. Teste de Estabelecimentos
-        est_csv: Path = dir_path / "estabelecimentos.csv"
-        est_parquet: Path = dir_path / "estabelecimentos.parquet"
-        est_csv.write_text(
-            '"12ABC345";"0001";"95";"1";"MATRIZ";"02";"20210510";"00";"";"";"20210510";"6201501";"";"AVENIDA";"PAULISTA";"1000";"SALA 10";"BELA VISTA";"01310100";"SP";"7107";"11";"33334444";"";"";"";"";"contato@empresa.com";"";""\n',
-            encoding="utf-8",
-        )
-        total_est: int = cnpydge.to_parquet(
-            str(est_csv), str(est_parquet), kind="estabelecimentos"
-        )
-        LOGGER.info(
-            "Estabelecimentos: %d linhas convertidas -> %d bytes.",
-            total_est,
-            est_parquet.stat().st_size,
-        )
-
-        # 4. Teste de Simples Nacional / MEI
-        simp_csv: Path = dir_path / "simples.csv"
-        simp_parquet: Path = dir_path / "simples.parquet"
-        simp_csv.write_text(
-            '"12ABC345";"S";"20200101";"20211231";"N";"";""\n',
-            encoding="utf-8",
-        )
-        total_sim: int = cnpydge.to_parquet(
-            str(simp_csv), str(simp_parquet), kind="simples"
-        )
-        LOGGER.info(
-            "Simples: %d linhas convertidas -> %d bytes.",
-            total_sim,
-            simp_parquet.stat().st_size,
-        )
-
-        # 5. Teste de Tabelas de Domínio (CNAEs e Municípios)
-        cnae_csv: Path = dir_path / "cnaes.csv"
-        cnae_parquet: Path = dir_path / "cnaes.parquet"
-        cnae_csv.write_text(
-            '"6201501";"DESENVOLVIMENTO DE PROGRAMAS DE COMPUTADOR SOB ENCOMENDA"\n',
-            encoding="utf-8",
-        )
-        total_cnae: int = cnpydge.to_parquet(
-            str(cnae_csv), str(cnae_parquet), kind="cnaes"
-        )
-        LOGGER.info(
-            "CNAEs: %d linhas convertidas -> %d bytes.",
-            total_cnae,
-            cnae_parquet.stat().st_size,
-        )
-
-        mun_csv: Path = dir_path / "municipios.csv"
-        mun_parquet: Path = dir_path / "municipios.parquet"
-        mun_csv.write_text('"7107";"SAO PAULO"\n', encoding="utf-8")
-        total_mun: int = cnpydge.to_parquet(
-            str(mun_csv), str(mun_parquet), kind="municipios"
-        )
-        LOGGER.info(
-            "Municípios: %d linhas convertidas -> %d bytes.",
-            total_mun,
-            mun_parquet.stat().st_size,
-        )
+        dir_path = Path(tmp_dir)
+        for name, kind, sample_csv in DEMO_CASES:
+            _demo_table(dir_path, name, kind, sample_csv)
 
 
 if __name__ == "__main__":

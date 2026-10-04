@@ -31,6 +31,51 @@ pub fn clean_quotes(campo: &[u8]) -> &[u8] {
     }
 }
 
+/// Divide uma linha CSV delimitada por ponto e vírgula com suporte a aspas duplas em N fatias de bytes.
+///
+/// ### Parâmetros
+/// - `line`: Fatia bruta de bytes referente a uma linha do arquivo CSV.
+///
+/// ### Retorno
+/// Array na pilha contendo exatamente `N` referências zero-copy aos campos identificados.
+///
+/// ### Erros
+/// Retorna `ErroCampo::CamposInsuficientes` caso a linha contenha quantidade divergente de `N` colunas.
+#[inline]
+pub fn split_csv_line<'a, const N: usize>(line: &'a [u8]) -> Result<[&'a [u8]; N], ErroCampo> {
+    let mut campos: [&'a [u8]; N] = [&[]; N];
+    let mut indice_campo: usize = 0;
+    let mut inicio: usize = 0;
+    let mut em_aspas: bool = false;
+
+    for (i, &byte) in line.iter().enumerate() {
+        if byte == b'"' {
+            em_aspas = !em_aspas;
+        } else if byte == b';' && !em_aspas {
+            if indice_campo < N {
+                campos[indice_campo] = &line[inicio..i];
+                indice_campo += 1;
+            }
+            inicio = i + 1;
+        }
+    }
+
+    if indice_campo < N && inicio <= line.len() {
+        let mut fim: usize = line.len();
+        while fim > inicio && (line[fim - 1] == b'\n' || line[fim - 1] == b'\r') {
+            fim -= 1;
+        }
+        campos[indice_campo] = &line[inicio..fim];
+        indice_campo += 1;
+    }
+
+    if indice_campo != N {
+        return Err(ErroCampo::CamposInsuficientes);
+    }
+
+    Ok(campos)
+}
+
 /// Acumula dígitos ASCII em u64 com detecção de overflow (núcleo único compartilhado).
 #[inline]
 fn parse_ascii_digits(bytes: &[u8]) -> Result<u64, ErroCampo> {

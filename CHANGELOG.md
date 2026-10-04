@@ -27,6 +27,8 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
   - `parse_capital` em `empresa.rs`: Conversão monetária *in-place* com buffer de pilha (`[0u8; 32]`), garantindo **zero-allocation** no heap para as ~60 milhões de linhas de empresas da RFB.
   - `split_two_fields` em `dominio.rs`: Adoção dos métodos idiomáticos `strip_suffix` e `iter().position(...)`.
   - `converter.rs`: Unificação de tabelas de domínio (`u32` e `u16`) via macro declarativa `build_dominio_batch!`.
+  - `split_csv_line` em `util.rs`: Unificação do particionamento de colunas CSV delimitadas com aspas via *const generics*, eliminando duplicação de laços em `empresa.rs`, `socio.rs`, `estabelecimento.rs` e `simples.rs`.
+  - `main.py`: Parametrização declarativa dos casos de demonstração via `DEMO_CASES`, eliminando blocos repetidos de teste.
 
 ## [0.2.0] - 2026-09-30
 

@@ -1,6 +1,6 @@
 //! Representação e validação com tipagem forte dos registros da tabela Simples / MEI.
 
-use crate::util::{ErroCampo, clean_quotes, opt_str, parse_opt_u32};
+use crate::util::{ErroCampo, clean_quotes, opt_str, parse_opt_u32, split_csv_line};
 
 /// Registro validado e fortemente tipado da tabela Simples / MEI da Receita Federal.
 #[derive(Debug, PartialEq)]
@@ -23,30 +23,7 @@ impl<'a> Simples<'a> {
     /// ### Retorno
     /// - `Result<Self, ErroCampo>`: Estrutura tipada ou erro de parsing/validação.
     pub fn parse_line(line: &'a [u8]) -> Result<Self, ErroCampo> {
-        let mut campos = [&b""[..]; 7];
-        let mut idx = 0;
-        let mut inicio = 0;
-
-        for (i, &b) in line.iter().enumerate() {
-            if b == b';' {
-                if idx < 7 {
-                    campos[idx] = &line[inicio..i];
-                    idx += 1;
-                    inicio = i + 1;
-                } else {
-                    break;
-                }
-            }
-        }
-
-        if idx < 7 && inicio <= line.len() {
-            campos[idx] = &line[inicio..];
-            idx += 1;
-        }
-
-        if idx < 7 {
-            return Err(ErroCampo::CamposInsuficientes);
-        }
+        let campos: [&'a [u8]; 7] = split_csv_line::<7>(line)?;
 
         let cnpj_basico = clean_quotes(campos[0]);
         if cnpj_basico.len() != 8 || !cnpj_basico.iter().all(|b| b.is_ascii_alphanumeric()) {

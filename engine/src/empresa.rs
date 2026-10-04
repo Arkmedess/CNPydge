@@ -1,6 +1,6 @@
 //! Representação e validação com tipagem forte dos registros da tabela de Empresas do CNPJ.
 
-use crate::util::{ErroCampo, clean_quotes, parse_u8, parse_u16};
+use crate::util::{ErroCampo, clean_quotes, parse_u8, parse_u16, split_csv_line};
 use std::str;
 
 /// Registro validado e fortemente tipado de uma Empresa.
@@ -37,35 +37,7 @@ impl<'a> Empresa<'a> {
     /// - `ErroCampo::NumeroInvalido`: Se natureza jurídica, qualificação, capital ou porte forem inválidos.
     /// - `ErroCampo::TextoInvalido`: Se razão social ou ente federativo não forem UTF-8 válidos.
     pub fn parse_line(linha: &'a [u8]) -> Result<Self, ErroCampo> {
-        let mut campos: [&'a [u8]; 7] = [&[]; 7];
-        let mut indice_campo: usize = 0;
-        let mut inicio: usize = 0;
-        let mut em_aspas: bool = false;
-
-        for (i, &byte) in linha.iter().enumerate() {
-            if byte == b'"' {
-                em_aspas = !em_aspas;
-            } else if byte == b';' && !em_aspas {
-                if indice_campo < 7 {
-                    campos[indice_campo] = &linha[inicio..i];
-                    indice_campo += 1;
-                }
-                inicio = i + 1;
-            }
-        }
-
-        if indice_campo < 7 && inicio <= linha.len() {
-            let mut fim: usize = linha.len();
-            while fim > inicio && (linha[fim - 1] == b'\n' || linha[fim - 1] == b'\r') {
-                fim -= 1;
-            }
-            campos[indice_campo] = &linha[inicio..fim];
-            indice_campo += 1;
-        }
-
-        if indice_campo != 7 {
-            return Err(ErroCampo::CamposInsuficientes);
-        }
+        let campos: [&'a [u8]; 7] = split_csv_line::<7>(linha)?;
 
         let cnpj_raw: &'a [u8] = clean_quotes(campos[0]);
         if cnpj_raw.len() != 8 || !cnpj_raw.iter().all(|b: &u8| b.is_ascii_alphanumeric()) {

@@ -4,7 +4,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 import httpx
 
@@ -13,6 +13,51 @@ from cnpydge.logging import get_logger
 LOGGER = get_logger("cnpydge.downloader")
 
 DEFAULT_CHUNK_SIZE_BYTES: Final[int] = 1024 * 1024  # 1 MB
+
+
+def _is_already_completed(
+    client: httpx.Client,
+    url: str,
+    dest_path: Path,
+    auth: Any,
+) -> bool:
+    """Verifica se o arquivo local já existe com tamanho idêntico ao reportado pelo servidor via HEAD."""
+    if not dest_path.is_file():
+        return False
+    try:
+        head_resp = client.head(url, auth=auth)
+        if head_resp.status_code == 200:
+            remote_len = head_resp.headers.get("Content-Length")
+            if remote_len and int(remote_len) == dest_path.stat().st_size:
+                LOGGER.info(
+                    "Arquivo '%s' já existe e está íntegro. Download ignorado.",
+                    dest_path,
+                )
+                return True
+    except httpx.RequestError as err:
+        LOGGER.debug(
+            "Falha na checagem HEAD prévia para '%s': %s. Prosseguindo com download.",
+            url,
+            err,
+        )
+    return False
+
+
+def _build_range_headers(
+    part_path: Path,
+    resume: bool,
+) -> tuple[dict[str, str], int, str]:
+    """Configura o cabeçalho HTTP Range e modo de abertura para retomada de download."""
+    if resume and part_path.is_file():
+        downloaded = part_path.stat().st_size
+        if downloaded > 0:
+            LOGGER.info(
+                "Retomando download de '%s' a partir de %d bytes via HTTP Range.",
+                part_path.name,
+                downloaded,
+            )
+            return {"Range": f"bytes={downloaded}-"}, downloaded, "ab"
+    return {}, 0, "wb"
 
 
 def download_file(
@@ -52,44 +97,10 @@ def download_file(
     auth_kwarg = auth if auth is not None else httpx.USE_CLIENT_DEFAULT
 
     try:
-        # 1. Verifica se o arquivo final já existe e confere tamanho
-        if dest_path.is_file():
-            try:
-                head_resp = http_client.head(url, auth=auth_kwarg)
-                if head_resp.status_code == 200:
-                    remote_len_header = head_resp.headers.get("Content-Length")
-                    if (
-                        remote_len_header
-                        and int(remote_len_header) == dest_path.stat().st_size
-                    ):
-                        LOGGER.info(
-                            "Arquivo '%s' já existe e está íntegro. Download ignorado.",
-                            dest_path,
-                        )
-                        return dest_path
-            except httpx.RequestError as err:
-                LOGGER.debug(
-                    "Falha na checagem HEAD prévia para '%s': %s. Prosseguindo com download.",
-                    url,
-                    err,
-                )
+        if _is_already_completed(http_client, url, dest_path, auth_kwarg):
+            return dest_path
 
-        # 2. Configura retomada parcial (HTTP Range)
-        headers: dict[str, str] = {}
-        downloaded_bytes = 0
-        file_mode = "wb"
-
-        if resume and part_path.is_file():
-            downloaded_bytes = part_path.stat().st_size
-            if downloaded_bytes > 0:
-                headers["Range"] = f"bytes={downloaded_bytes}-"
-                file_mode = "ab"
-                LOGGER.info(
-                    "Retomando download de '%s' a partir de %d bytes via HTTP Range.",
-                    part_path.name,
-                    downloaded_bytes,
-                )
-
+        headers, downloaded_bytes, file_mode = _build_range_headers(part_path, resume)
         start_time: float = time.perf_counter()
 
         with http_client.stream("GET", url, auth=auth_kwarg, headers=headers) as response:
@@ -121,11 +132,9 @@ def download_file(
                     if on_progress:
                         on_progress(downloaded_bytes, total_expected_bytes)
 
-
         elapsed: float = max(time.perf_counter() - start_time, 1e-9)
         tput_mb: float = (downloaded_bytes / (1024 * 1024)) / elapsed
 
-        # 3. Renomeação atômica do arquivo temporário para o destino final
         part_path.replace(dest_path)
 
         LOGGER.info(

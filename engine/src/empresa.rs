@@ -113,11 +113,15 @@ fn parse_capital(bytes: &[u8]) -> Result<f64, ErroCampo> {
     if bytes.is_empty() {
         return Ok(0.0);
     }
-    let s: &str = str::from_utf8(bytes).map_err(|_| ErroCampo::NumeroInvalido)?;
-    let s_formatado: String = s.replace(',', ".");
-    s_formatado
-        .parse::<f64>()
-        .map_err(|_| ErroCampo::NumeroInvalido)
+    if bytes.len() > 32 {
+        return Err(ErroCampo::NumeroInvalido);
+    }
+    let mut buf = [0u8; 32];
+    for (i, &b) in bytes.iter().enumerate() {
+        buf[i] = if b == b',' { b'.' } else { b };
+    }
+    let s = str::from_utf8(&buf[..bytes.len()]).map_err(|_| ErroCampo::NumeroInvalido)?;
+    s.parse::<f64>().map_err(|_| ErroCampo::NumeroInvalido)
 }
 
 #[cfg(test)]

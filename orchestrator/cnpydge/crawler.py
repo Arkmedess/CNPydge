@@ -4,7 +4,6 @@ import fnmatch
 import os
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import datetime
 from types import TracebackType
 from typing import Final, Self
 
@@ -135,14 +134,14 @@ class WebDavCrawler:
             if not parts:
                 continue
             folder_name: str = parts[-1]
-            if len(folder_name) == 7 and folder_name[4] == "-":
-                try:
-                    datetime.strptime(f"{folder_name}-01", "%Y-%m-%d").replace(
-                        tzinfo=datetime.now().astimezone().tzinfo
-                    )
-                    periods.append(folder_name)
-                except ValueError:
-                    continue
+            if (
+                len(folder_name) == 7
+                and folder_name[4] == "-"
+                and folder_name[:4].isdigit()
+                and folder_name[5:].isdigit()
+                and 1 <= int(folder_name[5:]) <= 12
+            ):
+                periods.append(folder_name)
 
         periods.sort(reverse=True)
         LOGGER.info("Períodos identificados (%d): %s", len(periods), periods)
@@ -150,16 +149,16 @@ class WebDavCrawler:
 
     def list_files_by_period(
         self,
-        period: str,
+        period: str = "",
         include_patterns: list[str] | None = None,
         exclude_patterns: list[str] | None = None,
         min_file_size: int | None = None,
         max_file_size: int | None = None,
     ) -> list[RemoteFileMetadata]:
-        """Lista os arquivos disponíveis para um período específico aplicando filtros.
+        """Lista os arquivos disponíveis para um período específico (ou raiz) aplicando filtros.
 
         Args:
-            period: Período no formato YYYY-MM (ex.: '2026-03').
+            period: Período no formato YYYY-MM (ex.: '2026-03') ou vazio para a raiz.
             include_patterns: Padrões glob para inclusão (ex.: ['*.zip']).
             exclude_patterns: Padrões glob para exclusão.
             min_file_size: Tamanho mínimo em bytes.
@@ -168,8 +167,8 @@ class WebDavCrawler:
         Returns:
             Lista de metadados dos arquivos validados.
         """
-        url = f"{self.base_url}/{period}/"
-        LOGGER.info("Listando arquivos WebDAV para o período '%s' em: %s", period, url)
+        url = f"{self.base_url}/{period}/" if period else f"{self.base_url}/"
+        LOGGER.info("Listando arquivos WebDAV para o período '%s' em: %s", period or "raiz", url)
 
         try:
             response = self.client.request(
@@ -182,7 +181,7 @@ class WebDavCrawler:
         except (httpx.HTTPStatusError, httpx.RequestError):
             LOGGER.exception(
                 "Falha ao consultar arquivos do período '%s'",
-                period,
+                period or "raiz",
             )
             return []
 
@@ -220,27 +219,7 @@ class WebDavCrawler:
             if periods:
                 target_period = periods[0]
 
-        if target_period:
-            return self.list_files_by_period(target_period, include_patterns=[pattern])
-
-        url = f"{self.base_url}/"
-        LOGGER.info("Consultando arquivos na raiz do WebDAV: %s", url)
-        try:
-            response = self.client.request(
-                "PROPFIND",
-                url,
-                auth=self.auth,
-                headers={"Depth": "1"},
-            )
-            response.raise_for_status()
-            files = self._parse_webdav_response(response.text, period="")
-            return self._apply_filters(files, include_patterns=[pattern])
-        except (httpx.HTTPStatusError, httpx.RequestError):
-            LOGGER.exception(
-                "Falha ao catalogar arquivos na raiz do WebDAV (%s)",
-                url,
-            )
-            return []
+        return self.list_files_by_period(target_period or "", include_patterns=[pattern])
 
     def _parse_webdav_response(
         self,
@@ -307,7 +286,7 @@ class WebDavCrawler:
         min_file_size: int | None = None,
         max_file_size: int | None = None,
     ) -> list[RemoteFileMetadata]:
-        """Aplica filtros de tamanho e padrões glob à lista de arquivos.
+        """Aplica filtros de tamanho e padrões glob à lista de arquivos em passada única.
 
         Args:
             files: Lista de metadados dos arquivos remotos a filtrar.
@@ -319,27 +298,16 @@ class WebDavCrawler:
         Returns:
             Lista filtrada de RemoteFileMetadata aderente a todos os critérios.
         """
-        result: list[RemoteFileMetadata] = files
+        def matches(f: RemoteFileMetadata) -> bool:
+            if include_patterns and not any(fnmatch.fnmatch(f.name, p) for p in include_patterns):
+                return False
+            if exclude_patterns and any(fnmatch.fnmatch(f.name, p) for p in exclude_patterns):
+                return False
+            if min_file_size is not None and f.size_bytes < min_file_size:
+                return False
+            return not (max_file_size is not None and f.size_bytes > max_file_size)
 
-        if include_patterns:
-            result = [
-                f for f in result
-                if any(fnmatch.fnmatch(f.name, p) for p in include_patterns)
-            ]
-
-        if exclude_patterns:
-            result = [
-                f for f in result
-                if not any(fnmatch.fnmatch(f.name, p) for p in exclude_patterns)
-            ]
-
-        if min_file_size is not None:
-            result = [f for f in result if f.size_bytes >= min_file_size]
-
-        if max_file_size is not None:
-            result = [f for f in result if f.size_bytes <= max_file_size]
-
-        return result
+        return [f for f in files if matches(f)]
 
     def close(self) -> None:
         """Encerra conexões abertas caso o client seja gerenciado pela instância."""

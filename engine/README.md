@@ -23,7 +23,7 @@ A crate expõe a biblioteca dinâmica `cnpydge._core` com as seguintes funções
 - **`reader.rs`:** `MmapReader` gerencia o mapeamento de memória virtual via `memmap2` e cálculo de fatias contíguas alinhadas a quebras de linha (`\n`).
 - **`converter.rs`:** Orquestrador que distribui blocos pelo pool Rayon, instancia construtores Arrow e escreve em Parquet (Snappy) via `ArrowWriter`.
 - **Parsers de Domínio (`empresa.rs`, `socio.rs`, `estabelecimento.rs`, `simples.rs`, `dominio.rs`):** Fatiamento zero-copy de bytes, remoção de aspas e conversão estrita de tipos.
-- **`util.rs`:** Utilitários de conversão numérica (`parse_u8`, `parse_u16`, `parse_u32`), monetária (`parse_capital`) e limpeza de aspas (`clean_quotes`).
+- **`util.rs`:** Utilitários de conversão numérica (`parse_u8`, `parse_u16`, `parse_u32`), monetária (`parse_capital`), limpeza de aspas (`clean_quotes`) e divisão atômica de colunas via const generics (`split_csv_line`).
 
 ## 4. Invariantes de Domínio
 1. **Zero-Copy em Limites de Bloco:** A leitura de arquivos mapeados não aloca strings temporárias para limites de bloco ou linhas brutas.

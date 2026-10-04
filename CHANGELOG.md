@@ -7,6 +7,27 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+- **Sanitização Ativa de Logs e Observabilidade (`cnpydge.logging`):**
+  - Filtro `SensitiveDataFilter` para mascaramento automático de credenciais em URLs, tokens Bearer, senhas e CPFs.
+  - Formatador `IsoUtcFormatter` com timestamps em UTC estrito no padrão RFC 3339 / ISO 8601.
+  - Formatador `JsonLogFormatter` para exportação de eventos em JSON estruturado para observabilidade.
+  - Inicialização idempotente e thread-safe de logging via `setup_logging()`.
+- **Prevenção Rigorosa de Bugs na Suíte de Testes:**
+  - Verificação de integridade colunar validando *magic bytes* `PAR1` nos arquivos Parquet gerados.
+  - Testes de segurança contra ataques de extração (*Zip Slip*) e arquivos compactados truncados/corrompidos.
+  - Cenários de falhas de rede WebDAV, tamanhos não-numéricos no XML e fallback para raiz.
+
+### Modificado
+- **Refatoração Pragmática & Redução de Complexidade:**
+  - `WebDavCrawler`: Unificação de consulta WebDAV entre `list_files_by_period` e `catalog`, eliminando duplicação de requisições `PROPFIND` e adotando filtro em passada única.
+  - `downloader`: Decomposição de `download_file` com funções auxiliares puras e *guard clauses*, reduzindo complexidade ciclomática de 12 para 3.
+  - `disk_cleanup_policy`: Centralização de descarte atômico via `path.unlink(missing_ok=True)` eliminando checagens TOCTOU manuais.
+- **Otimizações no Motor Nativo Rust (`cnpydge-core`):**
+  - `parse_capital` em `empresa.rs`: Conversão monetária *in-place* com buffer de pilha (`[0u8; 32]`), garantindo **zero-allocation** no heap para as ~60 milhões de linhas de empresas da RFB.
+  - `split_two_fields` em `dominio.rs`: Adoção dos métodos idiomáticos `strip_suffix` e `iter().position(...)`.
+  - `converter.rs`: Unificação de tabelas de domínio (`u32` e `u16`) via macro declarativa `build_dominio_batch!`.
+
 ## [0.2.0] - 2026-09-30
 
 ### Adicionado

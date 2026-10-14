@@ -65,11 +65,15 @@ def test_to_parquet_all_entity_kinds_integrity(
 
     assert total_rows == expected_rows
     assert dst.is_file()
-    assert dst.stat().st_size > 12  # Mínimo para conter cabeçalho, metadata e rodapé PAR1
+    assert (
+        dst.stat().st_size > 12
+    )  # Mínimo para conter cabeçalho, metadata e rodapé PAR1
 
     content_bytes = dst.read_bytes()
     # Padrão Apache Parquet: 4 bytes iniciais e finais são 'PAR1'
-    assert content_bytes[:4] == b"PAR1", f"Cabeçalho mágico Parquet inválido para {kind}"
+    assert content_bytes[:4] == b"PAR1", (
+        f"Cabeçalho mágico Parquet inválido para {kind}"
+    )
     assert content_bytes[-4:] == b"PAR1", f"Rodapé mágico Parquet inválido para {kind}"
 
 
@@ -102,3 +106,17 @@ def test_to_parquet_engine_error_logged(
         cnpydge.to_parquet(src, dst_dir, kind="empresas")
 
     assert "Falha no motor nativo" in caplog.text
+
+
+def test_to_parquet_empresas_schema_integrity(
+    tmp_path: Path, sample_empresa_csv_content: str
+) -> None:
+    """Garante que a conversão de empresas via EmpresaDescriptor gera o Parquet íntegro."""
+    src = tmp_path / "empresas.csv"
+    src.write_text(sample_empresa_csv_content, encoding="utf-8")
+    dst = tmp_path / "empresas.parquet"
+
+    rows = cnpydge.to_parquet(src, dst, kind="empresas")
+    assert rows == 2
+    assert dst.is_file()
+    assert dst.stat().st_size > 0

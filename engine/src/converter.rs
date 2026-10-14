@@ -1,14 +1,11 @@
 //! Conversor colunar unificado de alta vazão para Apache Parquet.
 
 use crate::dominio::Dominio;
-use crate::empresa::Empresa;
 use crate::estabelecimento::Estabelecimento;
 use crate::reader::MmapReader;
 use crate::simples::Simples;
 use crate::socio::Socio;
-use arrow::array::{
-    ArrayRef, Float64Builder, StringBuilder, UInt8Builder, UInt16Builder, UInt32Builder,
-};
+use arrow::array::{ArrayRef, StringBuilder, UInt8Builder, UInt16Builder, UInt32Builder};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use arrow::record_batch::RecordBatch;
 use parquet::arrow::ArrowWriter;
@@ -36,7 +33,20 @@ pub enum ConvertErr {
     UnsupportedTable(String),
 }
 
+/// Contrato declarativo para definição de esquemas e montagem colunar de tabelas da RFB.
+pub trait TableDescriptor: Send + Sync {
+    /// Identificador textual canônico da entidade (ex.: "empresas").
+    fn name(&self) -> &'static str;
+
+    /// Retorna a referência imutável ao esquema colunar Apache Arrow correspondente.
+    fn schema(&self) -> SchemaRef;
+
+    /// Converte uma fatia contígua de bytes CSV em um RecordBatch Arrow em memória.
+    fn build_batch(&self, slice: &[u8]) -> Result<Option<RecordBatch>, ConvertErr>;
+}
+
 /// Identificador fortemente tipado das tabelas do CNPJ suportadas.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TableKind {
     /// Tabela principal de dados cadastrais de Empresas.
@@ -94,15 +104,7 @@ impl TableKind {
     /// Referência compartilhada imutável (`SchemaRef`) para o esquema Arrow configurado.
     pub fn schema(&self) -> SchemaRef {
         match self {
-            Self::Empresas => Arc::new(Schema::new(vec![
-                Field::new("cnpj_basico", DataType::Utf8, false),
-                Field::new("razao_social", DataType::Utf8, false),
-                Field::new("natureza_juridica", DataType::UInt16, false),
-                Field::new("qualificacao_responsavel", DataType::UInt16, false),
-                Field::new("capital_social", DataType::Float64, false),
-                Field::new("porte", DataType::UInt8, false),
-                Field::new("ente_federativo", DataType::Utf8, true),
-            ])),
+            Self::Empresas => crate::empresa::EmpresaDescriptor.schema(),
             Self::Socios => Arc::new(Schema::new(vec![
                 Field::new("cnpj_basico", DataType::Utf8, false),
                 Field::new("identificador_socio", DataType::UInt8, false),
@@ -184,7 +186,7 @@ impl TableKind {
     /// Retorna `ConvertErr` caso haja inconsistência de tipos ou falha de construção do batch.
     pub fn build_batch(&self, slice: &[u8]) -> Result<Option<RecordBatch>, ConvertErr> {
         match self {
-            Self::Empresas => build_empresas(slice, &self.schema()),
+            Self::Empresas => crate::empresa::EmpresaDescriptor.build_batch(slice),
             Self::Socios => build_socios(slice, &self.schema()),
             Self::Estabelecimentos => build_estabelecimentos(slice, &self.schema()),
             Self::Simples => build_simples(slice, &self.schema()),
@@ -249,62 +251,6 @@ pub fn to_parquet<P1: AsRef<Path>, P2: AsRef<Path>>(
     writer.close()?;
 
     Ok(total_rows)
-}
-
-fn build_empresas(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
-    if slice.is_empty() {
-        return Ok(None);
-    }
-    let mut cnpj_b: StringBuilder = StringBuilder::new();
-    let mut razao_b: StringBuilder = StringBuilder::new();
-    let mut nat_jur_b: UInt16Builder = UInt16Builder::new();
-    let mut qualif_b: UInt16Builder = UInt16Builder::new();
-    let mut capital_b: Float64Builder = Float64Builder::new();
-    let mut porte_b: UInt8Builder = UInt8Builder::new();
-    let mut ente_fed_b: StringBuilder = StringBuilder::new();
-    let mut count: usize = 0;
-    let mut start: usize = 0;
-
-    for (i, &byte) in slice.iter().enumerate() {
-        if byte == b'\n' {
-            let line: &[u8] = &slice[start..i];
-            start = i + 1;
-            if line.is_empty() || (line.len() == 1 && line[0] == b'\r') {
-                continue;
-            }
-            let Ok(empresa) = Empresa::parse_line(line) else {
-                continue;
-            };
-            let Ok(cnpj_str) = std::str::from_utf8(empresa.cnpj) else {
-                continue;
-            };
-
-            cnpj_b.append_value(cnpj_str);
-            razao_b.append_value(empresa.razao);
-            nat_jur_b.append_value(empresa.nat_jur);
-            qualif_b.append_value(empresa.qualif);
-            capital_b.append_value(empresa.capital);
-            porte_b.append_value(empresa.porte);
-            match empresa.ente_fed {
-                Some(ente) => ente_fed_b.append_value(ente),
-                None => ente_fed_b.append_null(),
-            }
-            count += 1;
-        }
-    }
-    if count == 0 {
-        return Ok(None);
-    }
-    let columns: Vec<ArrayRef> = vec![
-        Arc::new(cnpj_b.finish()),
-        Arc::new(razao_b.finish()),
-        Arc::new(nat_jur_b.finish()),
-        Arc::new(qualif_b.finish()),
-        Arc::new(capital_b.finish()),
-        Arc::new(porte_b.finish()),
-        Arc::new(ente_fed_b.finish()),
-    ];
-    Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
 }
 
 fn build_socios(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {

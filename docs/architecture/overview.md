@@ -65,15 +65,17 @@ flowchart TD
 ## 2. Componentes Principais
 
 ### A. Camada de Orquestração (`orchestrator/cnpydge/`)
-- **`crawler.py`:** Consulta o repositório WebDAV da Receita Federal via HTTP `PROPFIND`, cataloga arquivos disponíveis, extrai metadados (`Content-Length`, `Last-Modified`) e mapeia prefixos para tabelas canônicas.
+- **`crawler.py`:** Cliente HTTP para o repositório WebDAV da Receita Federal via `PROPFIND`, cataloga arquivos disponíveis e extrai metadados (`Content-Length`, `Last-Modified`).
 - **`downloader.py`:** Executa downloads atômicos e concorrentes via `httpx.Client`, gerenciando arquivos parciais `.part` e implementando retentativas com cabeçalho `Range`.
-- **`pipeline/`:** Módulo de esteira integrada com arquitetura limpa e inversão de dependência:
-  - `rfb_pipeline_orchestrator.py`: Coordena a esteira unitária sequencial de ponta a ponta.
+- **`pipeline/`:** Módulo de esteira integrada com arquitetura limpa e inversão de dependência (SOLID):
+  - `rfb_pipeline_orchestrator.py`: Coordena a esteira unitária sequencial delegando a descoberta para `PartitionDiscoveryProvider` (DIP/LSP).
+  - `webdav_partition_discovery.py`: Implementação concreta `WebDavPartitionDiscoveryProvider` para catálogo WebDAV remoto.
+  - `partition_models.py`: Entidades de domínio declarativas e catálogo centralizado `RfbTableRegistry`.
+  - `pipeline_contracts.py`: Protocolos estruturais (`PartitionDiscoveryProvider`, `PartitionStorageSink`, etc.).
   - `checkpoint_manifest_store.py`: Persistência atômica em JSON do estado e telemetria de cada partição.
   - `zip_archive_extractor.py`: Descompressão atômica de arquivos compactados da RFB.
   - `disk_cleanup_policy.py`: Governança de expurgo imediato (*Rolling Eviction*) por perfil de retenção.
-  - `partition_models.py` & `pipeline_contracts.py`: Entidades de domínio declarativas e protocolos abstratos.
-- **`logging.py`:** Padroniza a telemetria com saída colorida no console e formatação RFC 3339.
+- **`logging.py`:** Padroniza a telemetria com saída colorida no console, formatação RFC 3339 e sanitização ativa de segredos.
 - **`__init__.py`:** Expõe a API pública unificada (`run_pipeline`, `to_parquet`), tipos de domínio e validações preliminares.
 
 ### B. Fronteira FFI (`engine/src/lib.rs`)
@@ -83,8 +85,8 @@ flowchart TD
 
 ### C. Motor Nativo (`engine/src/`)
 - **`reader.rs`:** Executa mapeamento de memória (`mmap`) e localiza limites de blocos alinhados a quebras de linha (`\n`) com custo zero de alocação.
-- **Parsers (`empresa.rs`, `socio.rs`, `estabelecimento.rs`, `simples.rs`, `dominio.rs`):** Fatiam bytes brutos, validam formato alfanumérico e convertem campos para tipos estritos.
-- **`converter.rs`:** Orquestra o particionamento com `Rayon`, instancia construtores Arrow (`StringBuilder`, `UInt32Builder`, etc.) e serializa os `RecordBatch` em Apache Parquet com compressão Snappy.
+- **`converter.rs`:** Orquestrador enxuto que distribui fatias pelo pool Rayon, delega esquemas e montagem de lotes para a trait `TableDescriptor` e escreve em Parquet (Snappy) via `ArrowWriter`.
+- **Descritores e Parsers Modulares (`empresa.rs`, `socio.rs`, `estabelecimento.rs`, `simples.rs`, `dominio.rs`):** Cada módulo implementa a trait `TableDescriptor` (`EmpresaDescriptor`, `SocioDescriptor`, `EstabelecimentoDescriptor`, `SimplesDescriptor`, `DominioDescriptor<T>`), encapsulando validação estrita, esquemas Arrow nativos e construção colunar de `RecordBatch`.
 
 ## 3. Invariantes Arquiteturais
 1. **Sem bloqueio de GIL:** Toda operação de leitura, parsing e escrita que exceda 1ms deve ocorrer fora da GIL do Python.

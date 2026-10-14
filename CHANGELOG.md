@@ -7,7 +7,16 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
-### Adicionado
+- **Desacoplamento Arquitetural SOLID e Inversão de Dependência:**
+  - `RfbTableRegistry`: Catálogo centralizado de metadados, layouts e padrões de arquivos da RFB (com suporte a `Qualificacoes.zip`).
+  - `PartitionDiscoveryProvider`: Protocolo abstrato para descoberta e enumeração de partições de dados públicos.
+  - `WebDavPartitionDiscoveryProvider`: Provedor desacoplado de descoberta WebDAV.
+  - Inversão de dependência em `RfbPipelineOrchestrator`, aceitando provedores customizados via construtor (DIP/LSP).
+- **Descentralização Colunar e Descritores Modulares no Motor Nativo:**
+  - Trait polimórfica `TableDescriptor` (`name`, `schema`, `build_batch`), permitindo extensão sem modificar o conversor central (OCP).
+  - Descritores modulares dedicados: `EmpresaDescriptor`, `SocioDescriptor`, `EstabelecimentoDescriptor`, `SimplesDescriptor` e `DominioDescriptor<T>`.
+  - Resolução unificada via `TableKind::descriptor(&self)`, reduzindo `converter.rs` de >760 para 321 linhas focadas estritamente no pipeline streaming.
+  - Registro formal do [ADR-0007: Desacoplamento Arquitetural SOLID e Descritores Colunares Modulares](docs/adr/0007-desacoplamento-solid-e-descritores-colunares.md).
 - **Sanitização Ativa de Logs e Observabilidade (`cnpydge.logging`):**
   - Filtro `SensitiveDataFilter` para mascaramento automático de credenciais em URLs, tokens Bearer, senhas e CPFs.
   - Formatador `IsoUtcFormatter` com timestamps em UTC estrito no padrão RFC 3339 / ISO 8601.

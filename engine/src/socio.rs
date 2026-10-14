@@ -1,9 +1,14 @@
 //! Representação e validação com tipagem forte dos registros da tabela de Sócios do CNPJ.
 
+use crate::converter::{ConvertErr, TableDescriptor};
 use crate::util::{
     ErroCampo, clean_quotes, opt_str, parse_opt_u16, parse_u8, parse_u16, parse_u32, split_csv_line,
 };
+use arrow::array::{ArrayRef, StringBuilder, UInt8Builder, UInt16Builder, UInt32Builder};
+use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+use arrow::record_batch::RecordBatch;
 use std::str;
+use std::sync::Arc;
 
 /// Registro validado e fortemente tipado de um Sócio da Receita Federal.
 #[derive(Debug, PartialEq)]
@@ -85,6 +90,110 @@ impl<'a> Socio<'a> {
     }
 }
 
+/// Descritor da tabela de Sócios responsável por seu esquema Arrow e montagem de lotes.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SocioDescriptor;
+
+impl TableDescriptor for SocioDescriptor {
+    fn name(&self) -> &'static str {
+        "socios"
+    }
+
+    fn schema(&self) -> SchemaRef {
+        Arc::new(Schema::new(vec![
+            Field::new("cnpj_basico", DataType::Utf8, false),
+            Field::new("identificador_socio", DataType::UInt8, false),
+            Field::new("nome_socio", DataType::Utf8, false),
+            Field::new("cpf_cnpj_socio", DataType::Utf8, false),
+            Field::new("qualificacao_socio", DataType::UInt16, false),
+            Field::new("data_entrada_sociedade", DataType::UInt32, false),
+            Field::new("pais", DataType::UInt16, true),
+            Field::new("representante_legal", DataType::Utf8, true),
+            Field::new("nome_representante", DataType::Utf8, true),
+            Field::new("qualificacao_representante", DataType::UInt16, true),
+            Field::new("faixa_etaria", DataType::UInt8, false),
+        ]))
+    }
+
+    fn build_batch(&self, slice: &[u8]) -> Result<Option<RecordBatch>, ConvertErr> {
+        if slice.is_empty() {
+            return Ok(None);
+        }
+        let schema: SchemaRef = self.schema();
+        let mut cnpj_b: StringBuilder = StringBuilder::new();
+        let mut tipo_socio_b: UInt8Builder = UInt8Builder::new();
+        let mut nome_b: StringBuilder = StringBuilder::new();
+        let mut doc_b: StringBuilder = StringBuilder::new();
+        let mut qualif_b: UInt16Builder = UInt16Builder::new();
+        let mut data_b: UInt32Builder = UInt32Builder::new();
+        let mut pais_b: UInt16Builder = UInt16Builder::new();
+        let mut rep_legal_b: StringBuilder = StringBuilder::new();
+        let mut nome_rep_b: StringBuilder = StringBuilder::new();
+        let mut qualif_rep_b: UInt16Builder = UInt16Builder::new();
+        let mut faixa_b: UInt8Builder = UInt8Builder::new();
+        let mut count: usize = 0;
+        let mut start: usize = 0;
+
+        for (i, &byte) in slice.iter().enumerate() {
+            if byte == b'\n' {
+                let line: &[u8] = &slice[start..i];
+                start = i + 1;
+                if line.is_empty() || (line.len() == 1 && line[0] == b'\r') {
+                    continue;
+                }
+                let Ok(socio) = Socio::parse_line(line) else {
+                    continue;
+                };
+                let Ok(cnpj_str) = std::str::from_utf8(socio.cnpj) else {
+                    continue;
+                };
+
+                cnpj_b.append_value(cnpj_str);
+                tipo_socio_b.append_value(socio.tipo_socio);
+                nome_b.append_value(socio.nome);
+                doc_b.append_value(socio.doc_socio);
+                qualif_b.append_value(socio.qualif);
+                data_b.append_value(socio.data_entrada);
+                match socio.pais {
+                    Some(p) => pais_b.append_value(p),
+                    None => pais_b.append_null(),
+                }
+                match socio.rep_legal {
+                    Some(r) => rep_legal_b.append_value(r),
+                    None => rep_legal_b.append_null(),
+                }
+                match socio.nome_rep {
+                    Some(n) => nome_rep_b.append_value(n),
+                    None => nome_rep_b.append_null(),
+                }
+                match socio.qualif_rep {
+                    Some(q) => qualif_rep_b.append_value(q),
+                    None => qualif_rep_b.append_null(),
+                }
+                faixa_b.append_value(socio.faixa_etaria);
+                count += 1;
+            }
+        }
+        if count == 0 {
+            return Ok(None);
+        }
+        let columns: Vec<ArrayRef> = vec![
+            Arc::new(cnpj_b.finish()),
+            Arc::new(tipo_socio_b.finish()),
+            Arc::new(nome_b.finish()),
+            Arc::new(doc_b.finish()),
+            Arc::new(qualif_b.finish()),
+            Arc::new(data_b.finish()),
+            Arc::new(pais_b.finish()),
+            Arc::new(rep_legal_b.finish()),
+            Arc::new(nome_rep_b.finish()),
+            Arc::new(qualif_rep_b.finish()),
+            Arc::new(faixa_b.finish()),
+        ];
+        Ok(Some(RecordBatch::try_new(schema, columns)?))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,5 +228,20 @@ mod tests {
         let line: &[u8] = b"\"123\";\"2\";\"MARIA SILVA\";\"***123456**\";\"49\";\"20200115\";\"\";\"\";\"\";\"\";\"5\"";
         let result: Result<Socio<'_>, ErroCampo> = Socio::parse_line(line);
         assert_eq!(result, Err(ErroCampo::CnpjInvalido));
+    }
+
+    #[test]
+    fn test_socio_descriptor_schema_and_batch() {
+        let desc = SocioDescriptor;
+        assert_eq!(desc.name(), "socios");
+        assert_eq!(desc.schema().fields().len(), 11);
+
+        let sample = b"\"12ABC345\";\"2\";\"MARIA SILVA\";\"***123456**\";\"49\";\"20200115\";\"\";\"***000000**\";\"JOSE SILVA\";\"05\";\"5\"\n";
+        let batch = desc
+            .build_batch(sample)
+            .expect("build batch")
+            .expect("some batch");
+        assert_eq!(batch.num_rows(), 1);
+        assert_eq!(batch.num_columns(), 11);
     }
 }

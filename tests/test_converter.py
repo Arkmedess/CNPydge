@@ -162,3 +162,31 @@ def test_to_parquet_simples_schema_integrity(
     assert rows == 1
     assert dst.is_file()
     assert dst.stat().st_size > 0
+
+
+def test_to_parquet_cnaes_schema_integrity(
+    tmp_path: Path, sample_cnae_csv_content: str
+) -> None:
+    """Garante que a conversão de cnaes via DominioDescriptor<u32> gera o Parquet íntegro."""
+    src = tmp_path / "cnaes.csv"
+    src.write_text(sample_cnae_csv_content, encoding="utf-8")
+    dst = tmp_path / "cnaes.parquet"
+
+    rows = cnpydge.to_parquet(src, dst, kind="cnaes")
+    assert rows == 1
+    assert dst.is_file()
+    assert dst.stat().st_size > 0
+
+
+def test_to_parquet_municipios_schema_integrity(
+    tmp_path: Path, sample_municipio_csv_content: str
+) -> None:
+    """Garante que a conversão de municipios via DominioDescriptor<u16> gera o Parquet íntegro."""
+    src = tmp_path / "municipios.csv"
+    src.write_text(sample_municipio_csv_content, encoding="utf-8")
+    dst = tmp_path / "municipios.parquet"
+
+    rows = cnpydge.to_parquet(src, dst, kind="municipios")
+    assert rows == 1
+    assert dst.is_file()
+    assert dst.stat().st_size > 0

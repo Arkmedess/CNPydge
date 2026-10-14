@@ -1,9 +1,7 @@
 //! Conversor colunar unificado de alta vazão para Apache Parquet.
 
-use crate::dominio::Dominio;
 use crate::reader::MmapReader;
-use arrow::array::{ArrayRef, StringBuilder, UInt16Builder, UInt32Builder};
-use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+use arrow::datatypes::SchemaRef;
 use arrow::record_batch::RecordBatch;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::Compression;
@@ -11,7 +9,6 @@ use parquet::file::properties::WriterProperties;
 use rayon::prelude::*;
 use std::fs::File;
 use std::path::Path;
-use std::sync::Arc;
 
 /// Erros tipados durante a leitura, conversão colunar e gravação do Parquet.
 #[derive(Debug, thiserror::Error)]
@@ -95,29 +92,31 @@ impl TableKind {
         }
     }
 
+    /// Resolve o descritor polimórfico estático correspondente à variante da tabela.
+    ///
+    /// ### Retorno
+    /// Referência imutável a uma implementação estática de `TableDescriptor`.
+    pub fn descriptor(&self) -> &'static dyn TableDescriptor {
+        match self {
+            Self::Empresas => &crate::empresa::EmpresaDescriptor,
+            Self::Socios => &crate::socio::SocioDescriptor,
+            Self::Estabelecimentos => &crate::estabelecimento::EstabelecimentoDescriptor,
+            Self::Simples => &crate::simples::SimplesDescriptor,
+            Self::Cnaes => &crate::dominio::CNAES_DESCRIPTOR,
+            Self::Motivos => &crate::dominio::MOTIVOS_DESCRIPTOR,
+            Self::Municipios => &crate::dominio::MUNICIPIOS_DESCRIPTOR,
+            Self::Naturezas => &crate::dominio::NATUREZAS_DESCRIPTOR,
+            Self::Paises => &crate::dominio::PAISES_DESCRIPTOR,
+            Self::Qualificacoes => &crate::dominio::QUALIFICACOES_DESCRIPTOR,
+        }
+    }
+
     /// Retorna o esquema colunar Apache Arrow específico da tabela.
     ///
     /// ### Retorno
     /// Referência compartilhada imutável (`SchemaRef`) para o esquema Arrow configurado.
     pub fn schema(&self) -> SchemaRef {
-        match self {
-            Self::Empresas => crate::empresa::EmpresaDescriptor.schema(),
-            Self::Socios => crate::socio::SocioDescriptor.schema(),
-            Self::Estabelecimentos => crate::estabelecimento::EstabelecimentoDescriptor.schema(),
-            Self::Simples => crate::simples::SimplesDescriptor.schema(),
-            Self::Cnaes => Arc::new(Schema::new(vec![
-                Field::new("codigo", DataType::UInt32, false),
-                Field::new("descricao", DataType::Utf8, false),
-            ])),
-            Self::Motivos
-            | Self::Municipios
-            | Self::Naturezas
-            | Self::Paises
-            | Self::Qualificacoes => Arc::new(Schema::new(vec![
-                Field::new("codigo", DataType::UInt16, false),
-                Field::new("descricao", DataType::Utf8, false),
-            ])),
-        }
+        self.descriptor().schema()
     }
 
     /// Constrói um `RecordBatch` para a fatia de bytes de acordo com o tipo da tabela.
@@ -131,20 +130,7 @@ impl TableKind {
     /// ### Erros
     /// Retorna `ConvertErr` caso haja inconsistência de tipos ou falha de construção do batch.
     pub fn build_batch(&self, slice: &[u8]) -> Result<Option<RecordBatch>, ConvertErr> {
-        match self {
-            Self::Empresas => crate::empresa::EmpresaDescriptor.build_batch(slice),
-            Self::Socios => crate::socio::SocioDescriptor.build_batch(slice),
-            Self::Estabelecimentos => {
-                crate::estabelecimento::EstabelecimentoDescriptor.build_batch(slice)
-            }
-            Self::Simples => crate::simples::SimplesDescriptor.build_batch(slice),
-            Self::Cnaes => build_dominio_u32(slice, &self.schema()),
-            Self::Motivos
-            | Self::Municipios
-            | Self::Naturezas
-            | Self::Paises
-            | Self::Qualificacoes => build_dominio_u16(slice, &self.schema()),
-        }
+        self.descriptor().build_batch(slice)
     }
 }
 
@@ -199,43 +185,6 @@ pub fn to_parquet<P1: AsRef<Path>, P2: AsRef<Path>>(
     writer.close()?;
 
     Ok(total_rows)
-}
-
-macro_rules! build_dominio_batch {
-    ($slice:expr, $schema:expr, $builder_type:ty, $dom_type:ty) => {{
-        let mut cod_b = <$builder_type>::new();
-        let mut desc_b = StringBuilder::new();
-        let mut row_count = 0;
-
-        for line in $slice.split(|&b| b == b'\n') {
-            let line = line.strip_suffix(b"\r").unwrap_or(line);
-            if line.is_empty() {
-                continue;
-            }
-
-            let Ok(dom) = Dominio::<$dom_type>::parse_line(line) else {
-                continue;
-            };
-            cod_b.append_value(dom.codigo);
-            desc_b.append_value(dom.descricao);
-            row_count += 1;
-        }
-
-        if row_count == 0 {
-            Ok(None)
-        } else {
-            let columns: Vec<ArrayRef> = vec![Arc::new(cod_b.finish()), Arc::new(desc_b.finish())];
-            Ok(Some(RecordBatch::try_new(Arc::clone($schema), columns)?))
-        }
-    }};
-}
-
-fn build_dominio_u32(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
-    build_dominio_batch!(slice, schema, UInt32Builder, u32)
-}
-
-fn build_dominio_u16(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
-    build_dominio_batch!(slice, schema, UInt16Builder, u16)
 }
 
 #[cfg(test)]

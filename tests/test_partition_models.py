@@ -53,3 +53,30 @@ def test_partition_processing_record_default_state() -> None:
     assert record.parquet_output_path is None
     assert record.rows_converted == 0
     assert record.error_message is None
+
+
+def test_rfb_table_registry_default_mappings() -> None:
+    """Garante que o catálogo padrão infira corretamente as entidades da Receita Federal."""
+    from cnpydge.pipeline.partition_models import RfbTableRegistry
+
+    registry = RfbTableRegistry()
+    assert registry.infer_table_kind("Empresas0.zip") == "empresas"
+    assert registry.infer_table_kind("Estabelecimentos1.zip") == "estabelecimentos"
+    assert registry.infer_table_kind("Socios2.zip") == "socios"
+    assert registry.infer_table_kind("Simples.zip") == "simples"
+    assert registry.infer_table_kind("Cnaes.zip") == "cnaes"
+    assert registry.infer_table_kind("Motivos.zip") == "motivos"
+    assert registry.infer_table_kind("Municipios.zip") == "municipios"
+    assert registry.infer_table_kind("Naturezas.zip") == "naturezas"
+    assert registry.infer_table_kind("Paises.zip") == "paises"
+    assert registry.infer_table_kind("Qualificacoes.zip") == "qualificacoes"
+    assert registry.infer_table_kind("ArquivoDesconhecido.zip") is None
+
+
+def test_rfb_table_registry_custom_mapping() -> None:
+    """Garante que o catálogo permita injeção de mapeamentos customizados (OCP)."""
+    from cnpydge.pipeline.partition_models import RfbTableRegistry
+
+    custom_registry = RfbTableRegistry(prefix_map={"nova_tabela": "novas_entidades"})
+    assert custom_registry.infer_table_kind("Nova_Tabela_2026.zip") == "novas_entidades"
+    assert custom_registry.infer_table_kind("Empresas0.zip") is None

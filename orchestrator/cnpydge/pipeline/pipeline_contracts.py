@@ -6,7 +6,30 @@ from typing import Protocol
 from cnpydge.pipeline.partition_models import (
     PartitionProcessingRecord,
     RfbPartitionStage,
+    RfbTablePartition,
 )
+
+
+class PartitionDiscoveryProvider(Protocol):
+    """Contrato declarativo para descoberta e catalogação de partições a processar."""
+
+    def discover_partitions(
+        self,
+        target_location: str,
+        table_filter: list[str] | None = None,
+        max_partitions: int | None = None,
+    ) -> list[RfbTablePartition]:
+        """Descobre recursos disponíveis e retorna a lista de partições normalizadas.
+
+        Args:
+            target_location: Localização ou endpoint alvo (ex.: URL WebDAV, caminho local, bucket).
+            table_filter: Filtro opcional de identificadores canônicos de tabelas.
+            max_partitions: Limite opcional de partições a serem retornadas.
+
+        Returns:
+            Lista de partições identificadas e mapeadas prontas para processamento.
+        """
+        ...
 
 
 class PipelineCheckpointStore(Protocol):

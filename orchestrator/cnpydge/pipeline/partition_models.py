@@ -42,3 +42,41 @@ class PartitionProcessingRecord:
     parquet_output_path: Path | None = None
     rows_converted: int = 0
     error_message: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RfbTableRegistry:
+    """Catálogo canônico e regras de inferência de tabelas públicas da Receita Federal."""
+
+    prefix_map: dict[str, str] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.prefix_map is None:
+            default_map: dict[str, str] = {
+                "empresa": "empresas",
+                "estabele": "estabelecimentos",
+                "socio": "socios",
+                "simples": "simples",
+                "cnae": "cnaes",
+                "motivo": "motivos",
+                "municipio": "municipios",
+                "natureza": "naturezas",
+                "pais": "paises",
+                "qualifica": "qualificacoes",
+            }
+            object.__setattr__(self, "prefix_map", default_map)
+
+    def infer_table_kind(self, filename: str) -> str | None:
+        """Infere o identificador canônico da tabela a partir do nome do arquivo.
+
+        Args:
+            filename: Nome do arquivo (ex.: 'Empresas0.zip').
+
+        Returns:
+            Nome canônico da tabela (ex.: 'empresas') ou None caso não mapeado.
+        """
+        lower_name: str = filename.lower()
+        for prefix, table in self.prefix_map.items():
+            if prefix in lower_name:
+                return table
+        return None

@@ -29,7 +29,7 @@ TABLE_PREFIX_MAP: Final[dict[str, str]] = {
     "municipio": "municipios",
     "natureza": "naturezas",
     "pais": "paises",
-    "qualificacao": "qualificacoes",
+    "qualifica": "qualificacoes",
 }
 
 
@@ -168,7 +168,9 @@ class WebDavCrawler:
             Lista de metadados dos arquivos validados.
         """
         url = f"{self.base_url}/{period}/" if period else f"{self.base_url}/"
-        LOGGER.info("Listando arquivos WebDAV para o período '%s' em: %s", period or "raiz", url)
+        LOGGER.info(
+            "Listando arquivos WebDAV para o período '%s' em: %s", period or "raiz", url
+        )
 
         try:
             response = self.client.request(
@@ -185,7 +187,9 @@ class WebDavCrawler:
             )
             return []
 
-        file_list: list[RemoteFileMetadata] = self._parse_webdav_response(response.text, period)
+        file_list: list[RemoteFileMetadata] = self._parse_webdav_response(
+            response.text, period
+        )
         return self._apply_filters(
             file_list,
             include_patterns=include_patterns,
@@ -219,7 +223,9 @@ class WebDavCrawler:
             if periods:
                 target_period = periods[0]
 
-        return self.list_files_by_period(target_period or "", include_patterns=[pattern])
+        return self.list_files_by_period(
+            target_period or "", include_patterns=[pattern]
+        )
 
     def _parse_webdav_response(
         self,
@@ -258,15 +264,23 @@ class WebDavCrawler:
             if not name or is_collection:
                 continue
 
-            last_modified: str | None = resp.findtext(".//d:getlastmodified", namespaces=DAV_NS)
-            size_bytes_raw: str | None = resp.findtext(".//d:getcontentlength", namespaces=DAV_NS)
+            last_modified: str | None = resp.findtext(
+                ".//d:getlastmodified", namespaces=DAV_NS
+            )
+            size_bytes_raw: str | None = resp.findtext(
+                ".//d:getcontentlength", namespaces=DAV_NS
+            )
             size_bytes: int = (
                 int(size_bytes_raw)
                 if size_bytes_raw and size_bytes_raw.isdigit()
                 else 0
             )
 
-            file_url = f"{self.base_url}/{period}/{name}" if period else f"{self.base_url}/{name}"
+            file_url = (
+                f"{self.base_url}/{period}/{name}"
+                if period
+                else f"{self.base_url}/{name}"
+            )
             files.append(
                 RemoteFileMetadata(
                     name=name,
@@ -298,10 +312,15 @@ class WebDavCrawler:
         Returns:
             Lista filtrada de RemoteFileMetadata aderente a todos os critérios.
         """
+
         def matches(f: RemoteFileMetadata) -> bool:
-            if include_patterns and not any(fnmatch.fnmatch(f.name, p) for p in include_patterns):
+            if include_patterns and not any(
+                fnmatch.fnmatch(f.name, p) for p in include_patterns
+            ):
                 return False
-            if exclude_patterns and any(fnmatch.fnmatch(f.name, p) for p in exclude_patterns):
+            if exclude_patterns and any(
+                fnmatch.fnmatch(f.name, p) for p in exclude_patterns
+            ):
                 return False
             if min_file_size is not None and f.size_bytes < min_file_size:
                 return False

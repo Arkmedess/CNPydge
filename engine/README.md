@@ -21,9 +21,14 @@ A crate expõe a biblioteca dinâmica `cnpydge._core` com as seguintes funções
 
 ## 3. Módulos Internos
 - **`reader.rs`:** `MmapReader` gerencia o mapeamento de memória virtual via `memmap2` e cálculo de fatias contíguas alinhadas a quebras de linha (`\n`).
-- **`converter.rs`:** Orquestrador que distribui blocos pelo pool Rayon, instancia construtores Arrow e escreve em Parquet (Snappy) via `ArrowWriter`.
-- **Parsers de Domínio (`empresa.rs`, `socio.rs`, `estabelecimento.rs`, `simples.rs`, `dominio.rs`):** Fatiamento zero-copy de bytes, remoção de aspas e conversão estrita de tipos.
-- **`util.rs`:** Utilitários de conversão numérica (`parse_u8`, `parse_u16`, `parse_u32`), monetária (`parse_capital`), limpeza de aspas (`clean_quotes`) e divisão atômica de colunas via const generics (`split_csv_line`).
+- **`converter.rs`:** Orquestrador enxuto que declara o contrato `TableDescriptor` e gerencia o pipeline de execução paralela via Rayon e gravação no Parquet (`ArrowWriter`). Desacoplado de regras concretas de entidade (SRP/OCP).
+- **Descritores e Parsers Modulares (`empresa.rs`, `socio.rs`, `estabelecimento.rs`, `simples.rs`, `dominio.rs`):** Cada módulo encapsula a validação dos registros brutos e implementa a trait `TableDescriptor`:
+  - `EmpresaDescriptor`: Esquema de 7 colunas e conversão monetária zero-allocation.
+  - `SocioDescriptor`: Esquema de 11 colunas do Quadro de Sócios e Administradores (QSA).
+  - `EstabelecimentoDescriptor`: Esquema de 30 colunas com parsing estrito de CNPJ completo (básico + ordem + DV), datas e flags.
+  - `SimplesDescriptor`: Esquema de 7 colunas de enquadramento Simples Nacional e MEI.
+  - `DominioDescriptor<K>`: Descritor genérico para tabelas de lookup da RFB com chave numérica tipada (`u32` para CNAEs e `u16` para Municípios, Motivos, Países, etc.).
+- **`util.rs`:** Utilitários de conversão numérica (`parse_u8`, `parse_u16`, `parse_u32`), limpeza de aspas (`clean_quotes`) e divisão atômica de colunas via const generics (`split_csv_line`).
 
 ## 4. Invariantes de Domínio
 1. **Zero-Copy em Limites de Bloco:** A leitura de arquivos mapeados não aloca strings temporárias para limites de bloco ou linhas brutas.

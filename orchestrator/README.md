@@ -49,8 +49,12 @@ def run_pipeline(
     max_partitions: int | None = None,
 ) -> list[PartitionProcessingRecord]: ...
 ```
-- Orquestra o ciclo de vida completo: descoberta remota via WebDAV, download temporário, extração atômica de ZIPs, conversão colunar via motor nativo Rust e descarte imediato (*Rolling Eviction*).
+- Orquestra o ciclo de vida completo: descoberta remota via provedor desacoplado, download temporário, extração atômica de ZIPs, conversão colunar via motor nativo Rust e descarte imediato (*Rolling Eviction*).
 - Garante retenção de disco mínima (~2-3 GB no pico com perfil `BALANCED_ROLLING_EVICTION`) e tolerância a falhas com retomada idempotente via manifesto de checkpoints (`JsonCheckpointManifestStore`).
+- **Arquitetura Desacoplada (SOLID):**
+  - `PartitionDiscoveryProvider`: Protocolo abstrato estrutural para descoberta de arquivos, permitindo injetar fontes WebDAV, S3, FTP ou locais sem modificar o orquestrador.
+  - `WebDavPartitionDiscoveryProvider`: Implementação padrão que consulta o repositório WebDAV da RFB.
+  - `RfbTableRegistry`: Catálogo declarativo das 10 tabelas canônicas e seus padrões de layout (incluindo `Qualificacoes.zip`).
 
 ## 3. Invariantes Operacionais
 1. **Atomicidade de Downloads:** O arquivo só é promovido de `.part` para a extensão definitiva após validação do `Content-Length`.

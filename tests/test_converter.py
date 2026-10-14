@@ -148,3 +148,17 @@ def test_to_parquet_estabelecimentos_schema_integrity(
     assert rows == 1
     assert dst.is_file()
     assert dst.stat().st_size > 0
+
+
+def test_to_parquet_simples_schema_integrity(
+    tmp_path: Path, sample_simples_csv_content: str
+) -> None:
+    """Garante que a conversão de simples nacional via SimplesDescriptor gera o Parquet íntegro."""
+    src = tmp_path / "simples.csv"
+    src.write_text(sample_simples_csv_content, encoding="utf-8")
+    dst = tmp_path / "simples.parquet"
+
+    rows = cnpydge.to_parquet(src, dst, kind="simples")
+    assert rows == 1
+    assert dst.is_file()
+    assert dst.stat().st_size > 0

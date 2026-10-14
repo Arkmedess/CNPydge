@@ -2,7 +2,6 @@
 
 use crate::dominio::Dominio;
 use crate::reader::MmapReader;
-use crate::simples::Simples;
 use arrow::array::{ArrayRef, StringBuilder, UInt16Builder, UInt32Builder};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use arrow::record_batch::RecordBatch;
@@ -105,15 +104,7 @@ impl TableKind {
             Self::Empresas => crate::empresa::EmpresaDescriptor.schema(),
             Self::Socios => crate::socio::SocioDescriptor.schema(),
             Self::Estabelecimentos => crate::estabelecimento::EstabelecimentoDescriptor.schema(),
-            Self::Simples => Arc::new(Schema::new(vec![
-                Field::new("cnpj_basico", DataType::Utf8, false),
-                Field::new("opcao_simples", DataType::Utf8, true),
-                Field::new("data_opcao_simples", DataType::UInt32, true),
-                Field::new("data_exclusao_simples", DataType::UInt32, true),
-                Field::new("opcao_mei", DataType::Utf8, true),
-                Field::new("data_opcao_mei", DataType::UInt32, true),
-                Field::new("data_exclusao_mei", DataType::UInt32, true),
-            ])),
+            Self::Simples => crate::simples::SimplesDescriptor.schema(),
             Self::Cnaes => Arc::new(Schema::new(vec![
                 Field::new("codigo", DataType::UInt32, false),
                 Field::new("descricao", DataType::Utf8, false),
@@ -146,7 +137,7 @@ impl TableKind {
             Self::Estabelecimentos => {
                 crate::estabelecimento::EstabelecimentoDescriptor.build_batch(slice)
             }
-            Self::Simples => build_simples(slice, &self.schema()),
+            Self::Simples => crate::simples::SimplesDescriptor.build_batch(slice),
             Self::Cnaes => build_dominio_u32(slice, &self.schema()),
             Self::Motivos
             | Self::Municipios
@@ -210,60 +201,6 @@ pub fn to_parquet<P1: AsRef<Path>, P2: AsRef<Path>>(
     Ok(total_rows)
 }
 
-fn build_simples(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
-    let mut cnpj_b = StringBuilder::new();
-    let mut opc_simples_b = StringBuilder::new();
-    let mut dt_opc_simples_b = UInt32Builder::new();
-    let mut dt_exc_simples_b = UInt32Builder::new();
-    let mut opc_mei_b = StringBuilder::new();
-    let mut dt_opc_mei_b = UInt32Builder::new();
-    let mut dt_exc_mei_b = UInt32Builder::new();
-
-    let mut row_count = 0;
-    for line in slice.split(|&b| b == b'\n') {
-        let line = if line.ends_with(b"\r") {
-            &line[..line.len() - 1]
-        } else {
-            line
-        };
-        if line.is_empty() {
-            continue;
-        }
-
-        let Ok(simples) = Simples::parse_line(line) else {
-            continue;
-        };
-        let Ok(cnpj_str) = std::str::from_utf8(simples.cnpj_basico) else {
-            continue;
-        };
-
-        cnpj_b.append_value(cnpj_str);
-        append_opt_str(&mut opc_simples_b, simples.opcao_simples);
-        append_opt_u32(&mut dt_opc_simples_b, simples.data_opcao_simples);
-        append_opt_u32(&mut dt_exc_simples_b, simples.data_exclusao_simples);
-        append_opt_str(&mut opc_mei_b, simples.opcao_mei);
-        append_opt_u32(&mut dt_opc_mei_b, simples.data_opcao_mei);
-        append_opt_u32(&mut dt_exc_mei_b, simples.data_exclusao_mei);
-
-        row_count += 1;
-    }
-
-    if row_count == 0 {
-        return Ok(None);
-    }
-
-    let columns: Vec<ArrayRef> = vec![
-        Arc::new(cnpj_b.finish()),
-        Arc::new(opc_simples_b.finish()),
-        Arc::new(dt_opc_simples_b.finish()),
-        Arc::new(dt_exc_simples_b.finish()),
-        Arc::new(opc_mei_b.finish()),
-        Arc::new(dt_opc_mei_b.finish()),
-        Arc::new(dt_exc_mei_b.finish()),
-    ];
-    Ok(Some(RecordBatch::try_new(Arc::clone(schema), columns)?))
-}
-
 macro_rules! build_dominio_batch {
     ($slice:expr, $schema:expr, $builder_type:ty, $dom_type:ty) => {{
         let mut cod_b = <$builder_type>::new();
@@ -299,22 +236,6 @@ fn build_dominio_u32(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBa
 
 fn build_dominio_u16(slice: &[u8], schema: &SchemaRef) -> Result<Option<RecordBatch>, ConvertErr> {
     build_dominio_batch!(slice, schema, UInt16Builder, u16)
-}
-
-#[inline]
-fn append_opt_str(b: &mut StringBuilder, val: Option<&str>) {
-    match val {
-        Some(v) => b.append_value(v),
-        None => b.append_null(),
-    }
-}
-
-#[inline]
-fn append_opt_u32(b: &mut UInt32Builder, val: Option<u32>) {
-    match val {
-        Some(v) => b.append_value(v),
-        None => b.append_null(),
-    }
 }
 
 #[cfg(test)]

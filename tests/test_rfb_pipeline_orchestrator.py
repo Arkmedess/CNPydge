@@ -117,7 +117,9 @@ def test_orchestrator_handles_exception_and_cleans_up(tmp_path: Path) -> None:
 
     mock_downloader = MagicMock(return_value=zip_path)
     mock_extractor = MagicMock()
-    mock_extractor.extract_csv_from_zip.side_effect = RuntimeError("Falha de descompressão")
+    mock_extractor.extract_csv_from_zip.side_effect = RuntimeError(
+        "Falha de descompressão"
+    )
     manifest_path = tmp_path / "checkpoint.json"
     store = JsonCheckpointManifestStore(manifest_path)
 
@@ -138,7 +140,9 @@ def test_orchestrator_handles_exception_and_cleans_up(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="Falha de descompressão"):
         orchestrator.process_partition(partition)
 
-    assert store.get_partition_stage("Socios0.zip") == RfbPartitionStage.PROCESSING_FAILED
+    assert (
+        store.get_partition_stage("Socios0.zip") == RfbPartitionStage.PROCESSING_FAILED
+    )
     assert not zip_path.exists()
 
 
@@ -146,10 +150,18 @@ def test_orchestrator_run_pipeline_with_filter_and_limit(tmp_path: Path) -> None
     """Verifica o método de conveniência run_pipeline com filtragem de tabelas e limite."""
     mock_crawler = MagicMock()
     mock_crawler.catalog.return_value = [
-        RemoteFileMetadata(name="Empresas0.zip", url="http://test/Empresas0.zip", size_bytes=100),
-        RemoteFileMetadata(name="Empresas1.zip", url="http://test/Empresas1.zip", size_bytes=100),
-        RemoteFileMetadata(name="Socios0.zip", url="http://test/Socios0.zip", size_bytes=100),
-        RemoteFileMetadata(name="ignorado.txt", url="http://test/ignorado.txt", size_bytes=10),
+        RemoteFileMetadata(
+            name="Empresas0.zip", url="http://test/Empresas0.zip", size_bytes=100
+        ),
+        RemoteFileMetadata(
+            name="Empresas1.zip", url="http://test/Empresas1.zip", size_bytes=100
+        ),
+        RemoteFileMetadata(
+            name="Socios0.zip", url="http://test/Socios0.zip", size_bytes=100
+        ),
+        RemoteFileMetadata(
+            name="ignorado.txt", url="http://test/ignorado.txt", size_bytes=10
+        ),
     ]
 
     orchestrator = RfbPipelineOrchestrator(
@@ -168,7 +180,9 @@ def test_orchestrator_run_pipeline_with_filter_and_limit(tmp_path: Path) -> None
 
 def test_public_run_pipeline_wrapper(tmp_path: Path) -> None:
     """Verifica a invocação da função pública cnpydge.run_pipeline."""
-    with patch("cnpydge.pipeline.rfb_pipeline_orchestrator.RfbPipelineOrchestrator.run_pipeline") as mock_run:
+    with patch(
+        "cnpydge.pipeline.rfb_pipeline_orchestrator.RfbPipelineOrchestrator.run_pipeline"
+    ) as mock_run:
         mock_run.return_value = []
         res = cnpydge.run_pipeline(
             output_dir=tmp_path / "out",
@@ -210,8 +224,16 @@ def test_orchestrator_sequential_multiple_partitions_end_to_end(
 
     mock_crawler = MagicMock()
     mock_crawler.catalog.return_value = [
-        RemoteFileMetadata(name="Empresas0.zip", url="https://mock/Empresas0.zip", size_bytes=emp_zip.stat().st_size),
-        RemoteFileMetadata(name="Socios0.zip", url="https://mock/Socios0.zip", size_bytes=soc_zip.stat().st_size),
+        RemoteFileMetadata(
+            name="Empresas0.zip",
+            url="https://mock/Empresas0.zip",
+            size_bytes=emp_zip.stat().st_size,
+        ),
+        RemoteFileMetadata(
+            name="Socios0.zip",
+            url="https://mock/Socios0.zip",
+            size_bytes=soc_zip.stat().st_size,
+        ),
     ]
 
     orchestrator = RfbPipelineOrchestrator(
@@ -243,5 +265,36 @@ def test_orchestrator_sequential_multiple_partitions_end_to_end(
     # 2. Segunda execução (Idempotência): ambas devem ser ignoradas pois já estão no manifesto
     second_records = orchestrator.run_pipeline()
     assert len(second_records) == 2
-    assert all(r.stage == RfbPartitionStage.CONVERSION_COMPLETED for r in second_records)
+    assert all(
+        r.stage == RfbPartitionStage.CONVERSION_COMPLETED for r in second_records
+    )
 
+
+def test_orchestrator_custom_discovery_provider_injection(tmp_path: Path) -> None:
+    """Valida a injeção desacoplada de PartitionDiscoveryProvider direto no orquestrador (DIP)."""
+    mock_provider = MagicMock()
+    mock_provider.discover_partitions.return_value = [
+        RfbTablePartition(
+            remote_filename="Empresas0.zip",
+            table_canonical_name="empresas",
+            download_url="https://fake/Empresas0.zip",
+            size_bytes=1000,
+        )
+    ]
+
+    orchestrator = RfbPipelineOrchestrator(
+        output_directory=tmp_path / "out",
+        discovery_provider=mock_provider,
+    )
+    with patch.object(orchestrator, "process_partition") as mock_process:
+        orchestrator.run_pipeline(
+            base_url="https://custom-repo/",
+            table_filter=["empresas"],
+            max_partitions=1,
+        )
+        mock_provider.discover_partitions.assert_called_once_with(
+            target_location="https://custom-repo/",
+            table_filter=["empresas"],
+            max_partitions=1,
+        )
+        mock_process.assert_called_once()

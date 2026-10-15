@@ -19,6 +19,7 @@ jobs:
   lint-format:
     name: Lint & Formatação
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
@@ -50,6 +51,7 @@ jobs:
     name: Testes Automatizados
     needs: lint-format
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
@@ -79,6 +81,7 @@ jobs:
     name: Build & Smoke Test
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
@@ -102,4 +105,22 @@ jobs:
         run: |
           uv run --with maturin maturin develop --release
           uv run python -c "import cnpydge; print('CNPydge importado com sucesso na versão:', cnpydge.version())"
+
+      - name: Detectar alterações em código nativo Rust ou contêiner
+        id: rust_filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            rust_or_docker:
+              - 'engine/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'Dockerfile'
+              - '.dockerignore'
+
+      - name: Smoke test do build da imagem Docker (quando houver diff em Rust ou Dockerfile)
+        if: steps.rust_filter.outputs.rust_or_docker == 'true' || github.ref == 'refs/heads/main'
+        run: |
+          docker build -t cnpydge:smoke-test .
+          docker run --rm cnpydge:smoke-test --version
 

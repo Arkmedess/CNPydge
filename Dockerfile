@@ -18,7 +18,11 @@ COPY Cargo.toml Cargo.lock pyproject.toml README.md LICENSE ./
 COPY engine/ engine/
 COPY orchestrator/ orchestrator/
 
-RUN uv run --with maturin maturin build --release --out dist
+# BuildKit cache mounts para acelerar compilações locais subsequentes
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/build/target \
+    uv run --with maturin maturin build --release --out dist
 
 # Estágio 2: Runtime enxuto e seguro (não-root)
 FROM python:3.13-slim AS runtime
@@ -39,5 +43,8 @@ USER appuser
 
 VOLUME ["/app/data"]
 
-ENTRYPOINT ["python", "-c", "import cnpydge; print('CNPydge Container Runtime - Motor:', cnpydge.version())"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD python -m cnpydge --version || exit 1
 
+ENTRYPOINT ["python", "-m", "cnpydge"]
+CMD ["--help"]

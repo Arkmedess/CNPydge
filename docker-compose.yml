@@ -1,0 +1,28 @@
+services:
+  cnpydge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cnpydge:latest
+    container_name: cnpydge-pipeline
+    volumes:
+      - ${CNPYDGE_DATA_DIR:-./dados_parquet}:/app/data
+    deploy:
+      resources:
+        limits:
+          cpus: "${CNPYDGE_CPU_LIMIT:-4.0}"
+          memory: "${CNPYDGE_MEMORY_LIMIT:-4096M}"
+        reservations:
+          cpus: "1.0"
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    command:
+      - "run"
+      - "--output-dir"
+      - "/app/data"
+      - "--profile"
+      - "${CNPYDGE_RETENTION_PROFILE:-balanced_rolling_eviction}"

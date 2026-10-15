@@ -1,0 +1,40 @@
+# Caches e artefatos de compilação
+target/
+dist/
+build/
+*.so
+*.egg-info/
+.eggs/
+
+# Python e ambientes virtuais
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Testes e cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Linters e ferramentas
+.ruff_cache/
+.mypy_cache/
+
+# Git e metadados de IDE
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+
+# Dados temporários de execução local
+dados/
+output/
+dados_parquet/
+tmp/
+*.zip
+*.csv
+*.parquet

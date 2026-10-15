@@ -7,6 +7,18 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ## [Unreleased]
 
+### Adicionado
+- **Padronização de Contêineres e Execução Isolada (`Dockerfile` e `docker-compose.yml`):**
+  - Imagem multi-stage otimizada com BuildKit cache mounts para Cargo e Maturin, reduzindo drasticamente o tempo de compilações subsequentes.
+  - Runtime de produção seguro com usuário não-root `appuser` (UID 10001), volume `/app/data` e `HEALTHCHECK` nativo.
+  - Orquestração local simplificada via `docker-compose.yml` parametrizável via `.env.example` com limites de contenção de CPU e memória RAM.
+  - Arquivo `.dockerignore` protegendo o contexto de build contra caches, dados locais e metadados `.git`.
+- **Ponto de Entrada Canônico de Terminal (`cnpydge.__main__`):**
+  - Módulo executável permitindo `python -m cnpydge --version` e `python -m cnpydge run --output-dir <dir>` com separação de canais `stdout`/`stderr`, exit codes padronizados e testes unitários em `tests/test_main.py`.
+- **Governança de Versões e Ciclo de Releases:**
+  - Formalização do documento [docs/governance/release-and-versioning-policy.md](docs/governance/release-and-versioning-policy.md) com critérios SemVer, histórico auditado de commits e esteira de release gates.
+- **Smoke Test de Docker Condicionado a Diff no CI (`.github/workflows/ci.yml`):**
+  - Teste de compilação da imagem Docker executado economicamente via `dorny/paths-filter@v3` apenas sob alterações no motor Rust ou manifests de contêiner.
 - **Desacoplamento Arquitetural SOLID e Inversão de Dependência:**
   - `RfbTableRegistry`: Catálogo centralizado de metadados, layouts e padrões de arquivos da RFB (com suporte a `Qualificacoes.zip`).
   - `PartitionDiscoveryProvider`: Protocolo abstrato para descoberta e enumeração de partições de dados públicos.
@@ -38,6 +50,9 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
   - `converter.rs`: Unificação de tabelas de domínio (`u32` e `u16`) via macro declarativa `build_dominio_batch!`.
   - `split_csv_line` em `util.rs`: Divisão atômica e *zero-copy* de linhas CSV via *const generics*, eliminando laços manuais e duplicação em `empresa.rs`, `socio.rs`, `estabelecimento.rs` e `simples.rs`.
   - `main.py`: Parametrização declarativa dos casos de demonstração via `DEMO_CASES`, eliminando blocos repetidos de teste.
+- **Documentação e Usabilidade (`README.md`):**
+  - Reestruturação separando com clareza os modos de uso (CLI via `python -m cnpydge`, Docker & Docker Compose e uso programático em Python).
+  - Unificação do bloco de testes e qualidade sem notas legadas de runtime e atualização da topologia do repositório.
 
 ## [0.2.0] - 2026-09-30
 

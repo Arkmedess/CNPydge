@@ -4,8 +4,6 @@
 
 ### Pipeline de alta vazão para os Dados Públicos de CNPJ da Receita Federal
 
-Construído com **Rust** e **Python**
-
 [![CI](https://img.shields.io/github/actions/workflow/status/Arkmedess/CNPydge/ci.yml?style=for-the-badge&label=CI&labelColor=1a1b26&color=7aa2f7)](https://github.com/Arkmedess/CNPydge/actions)
 [![Python](https://img.shields.io/badge/Python-3.13+-3776AB?style=for-the-badge&logo=python&logoColor=white&labelColor=1a1b26)](https://www.python.org/)
 [![Rust](https://img.shields.io/badge/Rust-2024_Edition-DEA584?style=for-the-badge&logo=rust&logoColor=white&labelColor=1a1b26)](https://www.rust-lang.org/)
@@ -38,16 +36,20 @@ O **CNPydge** resolve isso dividindo as responsabilidades: um motor nativo em Ru
 ```text
 CNPydge/
 ├── engine/              # Motor de alto desempenho em Rust (_core)
-│   ├── src/             # Leitor mmap, parsers zero-copy e ArrowWriter
+│   ├── src/             # Leitor mmap, parsers zero-copy, descritores modulares e ArrowWriter
 │   ├── benches/         # Harness de benchmarks com Criterion
 │   └── README.md        # Documentação técnica do motor nativo
 ├── orchestrator/        # Pacote Python de orquestração (cnpydge)
-│   ├── cnpydge/         # Crawler WebDAV, streaming downloader e wrapper FFI
+│   ├── cnpydge/         # Módulo executável (__main__.py), crawler, downloader e FFI
 │   │   └── pipeline/    # Esteira unitária, extração atômica, checkpoints e limpeza
 │   └── README.md        # Documentação da API Python e utilitários
 ├── docs/                # Documentação técnica e governança
-│   ├── adr/             # Registros de Decisão Arquitetural
-│   └── architecture/    # Visão geral, fluxo de dados e catálogo de esquemas
+│   ├── adr/             # Registros de Decisão Arquitetural (ADRs 0001 a 0007)
+│   ├── architecture/    # Visão geral, fluxo de dados e catálogo de esquemas
+│   └── governance/      # Política de versionamento SemVer e release gates
+├── Dockerfile           # Imagem multi-stage otimizada com usuário não-root
+├── docker-compose.yml   # Orquestração local com limites de recursos e volumes
+├── .env.example         # Template de variáveis de ambiente para Docker
 ├── CHANGELOG.md         # Histórico de versões
 └── .github/workflows/   # CI determinístico com validação e testes
 ```
@@ -67,39 +69,71 @@ Toda a narrativa técnica, decisões e especificações formais do projeto estã
   - [ADR-0004: Coleta Concorrente e Download Resumable via HTTP](docs/adr/0004-coleta-concorrente-e-download-resumable.md)
   - [ADR-0005: Suporte a CNPJ Alfanumérico e Coerção Estrita de Tipos](docs/adr/0005-cnpj-alfanumerico-e-coercao-de-tipos.md)
   - [ADR-0006: Ingestão por Esteira Unitária e Perfis de Armazenamento](docs/adr/0006-esteira-unitaria-rolling-eviction.md)
+  - [ADR-0007: Desacoplamento Arquitetural SOLID e Descritores Colunares Modulares](docs/adr/0007-desacoplamento-solid-e-descritores-colunares.md)
+- **Governança & Ciclo de Lançamentos:**
+  - [Política de Versionamento, Governança de Issues e Ciclo de Releases](docs/governance/release-and-versioning-policy.md)
 - **Módulos Locais:**
   - [Documentação do Motor Nativo em Rust](engine/README.md)
   - [Documentação do Orquestrador Python](orchestrator/README.md)
 - **Histórico de Mudanças:**
   - [Changelog](CHANGELOG.md)
 
-## Instalação e Uso Rápido
+## Instalação
 
-Para utilizar o CNPydge diretamente como pacote em seus projetos:
+O CNPydge pode ser instalado diretamente no ambiente Python via `uv` ou `pip`:
 
 ```bash
-# Instalação direta no ambiente Python
 uv pip install .
-
-# Execução do script de demonstração integrado
-uv run python main.py
 ```
 
-### Exemplo de Uso Programático
+## Modos de Uso
+
+### 1. Linha de Comando (CLI)
+
+O CNPydge dispõe de ponto de entrada direto para execuções em terminal e automações:
+
+```bash
+# Exibir versão do sistema e ajuda operacional
+python -m cnpydge --version
+python -m cnpydge --help
+
+# Executar esteira completa especificando diretório de saída e tabelas
+python -m cnpydge run --output-dir ./dados_parquet --tables empresas,socios
+```
+
+### 2. Docker & Docker Compose
+
+Para execução em contêineres isolados sem necessidade de toolchain local de compilação:
+
+```bash
+# 1. Compilar a imagem local multi-stage otimizada
+docker build -t cnpydge:latest .
+
+# 2. Executar a esteira montando o volume de saída no host
+docker run --rm -v $(pwd)/dados_parquet:/app/data cnpydge:latest run --output-dir /app/data
+
+# 3. Ou executar via Docker Compose parametrizado
+cp .env.example .env
+docker compose up
+```
+
+### 3. Uso Programático em Python
+
+Integração direta com código Python para pipelines analíticos e conversão de dados:
 
 ```python
 import cnpydge
 
-# 1. Ingestão de ponta a ponta com esteira unitária (baixo uso de disco ~2-3 GB)
+# Ingestão de ponta a ponta com esteira unitária (baixo uso de disco ~2-3 GB no pico)
 registros = cnpydge.run_pipeline(
     output_dir="./dados_parquet",
     tables=["empresas", "estabelecimentos"],
     profile=cnpydge.DiskRetentionProfile.BALANCED_ROLLING_EVICTION,
 )
 
-# 2. Conversão direta avulsa para Parquet (libera GIL)
+# Conversão direta avulsa de CSV para Parquet com liberação de GIL
 total = cnpydge.to_parquet("Empresas0.csv", "empresas.parquet", kind="empresas")
-print(f"Total de empresas convertidas: {total}")
+print(f"Total de registros convertidos: {total}")
 ```
 
 ## Desenvolvimento
@@ -127,10 +161,19 @@ uv run --with maturin maturin develop
 
 ### Testes e Qualidade
 
-- **Testes Python e Cobertura:** `uv run pytest --cov=cnpydge`
-- **Testes do Motor Rust:** `cargo test` *(o `.cargo/config.toml` vincula o runtime ao Python 3.13 do `.venv`, prevenindo conflitos com o rust-analyzer)*
-- **Linters e Análise Estática:** `uv run ruff check .` e `cargo clippy --all-targets`
-- **Benchmarks de Throughput:** `cargo bench`
+```bash
+# Executar suítes de testes automatizados (Rust + Python com cobertura)
+cargo test --all-targets
+uv run pytest --cov=cnpydge
+
+# Linters, formatação e análise estática
+cargo fmt --all --check
+cargo clippy --all-targets -- -D warnings
+uv run ruff check .
+
+# Benchmarks de throughput do motor nativo
+cargo bench
+```
 
 ## Licença
 

@@ -1,7 +1,7 @@
 """Provedor de descoberta e catalogação de partições baseado em WebDAV."""
 
-from cnpydge.crawler import WebDavCrawler
 from cnpydge.logging import get_logger
+from cnpydge.network import WebDavCrawler
 from cnpydge.pipeline.partition_models import RfbTablePartition, RfbTableRegistry
 from cnpydge.pipeline.pipeline_contracts import PartitionDiscoveryProvider
 

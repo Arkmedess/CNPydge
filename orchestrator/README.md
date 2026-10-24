@@ -19,16 +19,18 @@ def to_parquet(
 - Cria os diretórios de destino automaticamente (`mkdir(parents=True)`).
 - Mede o tempo de processamento e emite logs estruturados com throughput em `linhas/s` e `MB/s`.
 
-### B. Descoberta WebDAV (`cnpydge.crawler.WebDavCrawler`)
+### B. Descoberta WebDAV (`cnpydge.network.WebDavCrawler`)
 ```python
 class WebDavCrawler:
     def __init__(self, base_url: str | None = None, token: str | None = None, client: httpx.Client | None = None): ...
     def catalog(self, base_url: str, pattern: str = "*.zip") -> list[RemoteFileMetadata]: ...
 ```
+- Disponível canonicamente em `cnpydge.network` (com alias retrocompatível em `cnpydge.crawler`).
 - Realiza requisições `PROPFIND` com parsing tolerante a múltiplos namespaces XML.
 - Retorna instâncias imutáveis de `RemoteFileMetadata` contendo nome, URL direta, tamanho em bytes e data da última modificação.
 
-### C. Download em Streaming Concorrente (`cnpydge.downloader`)
+### C. Download em Streaming Concorrente (`cnpydge.network.downloader`)
+- Disponível canonicamente em `cnpydge.network` (com alias retrocompatível em `cnpydge.downloader`).
 - `download_file(...) -> Path`: Executa o download atômico em blocos de 1 MB, suportando retomada via cabeçalho HTTP `Range` caso exista um arquivo temporário `.part`.
 - `download_files_concurrently(...) -> list[Path]`: Coordena o download em paralelo de múltiplos arquivos utilizando `ThreadPoolExecutor`.
 

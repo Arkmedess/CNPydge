@@ -4,9 +4,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 import cnpydge
-from cnpydge.crawler import WebDavCrawler
-from cnpydge.downloader import download_file
 from cnpydge.logging import get_logger
+from cnpydge.network import WebDavCrawler, download_file
 from cnpydge.pipeline.checkpoint_manifest_store import JsonCheckpointManifestStore
 from cnpydge.pipeline.disk_cleanup_policy import create_disk_cleanup_policy
 from cnpydge.pipeline.partition_models import (

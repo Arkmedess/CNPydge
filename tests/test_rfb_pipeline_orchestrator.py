@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import cnpydge
 import pytest
-from cnpydge.crawler import RemoteFileMetadata
+from cnpydge.network import RemoteFileMetadata
 from cnpydge.pipeline.checkpoint_manifest_store import JsonCheckpointManifestStore
 from cnpydge.pipeline.disk_cleanup_policy import BalancedRollingEvictionPolicy
 from cnpydge.pipeline.partition_models import (

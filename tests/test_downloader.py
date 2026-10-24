@@ -4,7 +4,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from cnpydge.downloader import (
+from cnpydge.network import (
     download_file,
     download_files_concurrently,
 )
@@ -105,14 +105,18 @@ def test_download_file_already_completed(tmp_path: Path) -> None:
     assert dest.read_bytes() == content
 
 
-def test_download_file_truncated_existing_file_forces_redownload(tmp_path: Path) -> None:
+def test_download_file_truncated_existing_file_forces_redownload(
+    tmp_path: Path,
+) -> None:
     """Prevenção de bug: Arquivo pré-existente truncado (tamanho diverge) deve ser baixado integralmente."""
     full_content: bytes = b"conteudo_completo_de_100_bytes_para_validar_tamanho"
     truncated_content: bytes = b"conteudo_cortado"
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "HEAD":
-            return httpx.Response(200, headers={"Content-Length": str(len(full_content))})
+            return httpx.Response(
+                200, headers={"Content-Length": str(len(full_content))}
+            )
         return httpx.Response(200, content=full_content)
 
     transport = httpx.MockTransport(handler)
@@ -138,7 +142,9 @@ def test_download_file_head_error_gracefully_falls_back_to_get(tmp_path: Path) -
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "HEAD":
             raise httpx.RequestError("HEAD not allowed", request=request)
-        return httpx.Response(200, content=content, headers={"Content-Length": str(len(content))})
+        return httpx.Response(
+            200, content=content, headers={"Content-Length": str(len(content))}
+        )
 
     transport = httpx.MockTransport(handler)
     client = httpx.Client(transport=transport)

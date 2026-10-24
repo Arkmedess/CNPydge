@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from cnpydge.logging import get_logger
 from cnpydge.pipeline.partition_models import (
@@ -29,7 +29,10 @@ class JsonCheckpointManifestStore:
         """Carrega os dados persistidos do manifesto ou retorna dicionário vazio."""
         if self._path.is_file():
             try:
-                return json.loads(self._path.read_text(encoding="utf-8"))
+                data = json.loads(self._path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    return cast(dict[str, dict[str, Any]], data)
+                return {}
             except (json.JSONDecodeError, OSError) as err:
                 LOGGER.warning(
                     "Manifesto de checkpoint corrompido ou inacessível em '%s': %s. Reiniciando estado em memória.",

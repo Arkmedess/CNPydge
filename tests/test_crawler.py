@@ -1,7 +1,7 @@
 """Testes unitários rigorosos para o crawler WebDAV e metadados de arquivos."""
 
 import httpx
-from cnpydge.crawler import RemoteFileMetadata, WebDavCrawler
+from cnpydge.network import RemoteFileMetadata, WebDavCrawler
 
 SAMPLE_ROOT_PROPFIND: str = """<?xml version="1.0" encoding="utf-8"?>
 <d:multistatus xmlns:d="DAV:">
@@ -135,12 +135,16 @@ def test_list_files_by_period_parsing_and_filters() -> None:
     assert "leiame.txt" in names
 
     # 2. Filtro apenas zips
-    zip_files: list[RemoteFileMetadata] = crawler.list_files_by_period("2026-03", include_patterns=["*.zip"])
+    zip_files: list[RemoteFileMetadata] = crawler.list_files_by_period(
+        "2026-03", include_patterns=["*.zip"]
+    )
     assert len(zip_files) == 2
     assert all(f.is_zip for f in zip_files)
 
     # 3. Filtro por tamanho mínimo (ignora txt pequeno)
-    large_files: list[RemoteFileMetadata] = crawler.list_files_by_period("2026-03", min_file_size=10_000)
+    large_files: list[RemoteFileMetadata] = crawler.list_files_by_period(
+        "2026-03", min_file_size=10_000
+    )
     assert len(large_files) == 2
 
 
@@ -188,11 +192,15 @@ def test_crawler_filter_exclude_and_max_size() -> None:
     )
 
     # Exclusão de Empresas
-    filtered: list[RemoteFileMetadata] = crawler.list_files_by_period("2026-03", exclude_patterns=["*Empresas*"])
+    filtered: list[RemoteFileMetadata] = crawler.list_files_by_period(
+        "2026-03", exclude_patterns=["*Empresas*"]
+    )
     assert not any("Empresas" in f.name for f in filtered)
 
     # Max file size
-    small_files: list[RemoteFileMetadata] = crawler.list_files_by_period("2026-03", max_file_size=2000)
+    small_files: list[RemoteFileMetadata] = crawler.list_files_by_period(
+        "2026-03", max_file_size=2000
+    )
     assert len(small_files) == 1
     assert small_files[0].name == "leiame.txt"
     crawler.close()
@@ -211,7 +219,9 @@ def test_crawler_catalog_auto_discovers_latest_period() -> None:
 
     transport = httpx.MockTransport(handler)
     client = httpx.Client(transport=transport)
-    with WebDavCrawler(base_url="https://example.com/webdav", token="token-pub", client=client) as crawler:
+    with WebDavCrawler(
+        base_url="https://example.com/webdav", token="token-pub", client=client
+    ) as crawler:
         files = crawler.catalog(pattern="*.zip")
         assert len(files) == 2
         assert all(f.is_zip for f in files)
@@ -305,4 +315,3 @@ def test_crawler_handles_malformed_file_size_in_xml() -> None:
         assert len(files) == 1
         assert files[0].name == "ArquivoTamanhoInvalido.zip"
         assert files[0].size_bytes == 0
-

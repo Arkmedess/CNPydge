@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from cnpydge.crawler import RemoteFileMetadata, WebDavCrawler
+from cnpydge.network import RemoteFileMetadata, WebDavCrawler
 from cnpydge.pipeline.partition_models import RfbTableRegistry
 from cnpydge.pipeline.webdav_partition_discovery import WebDavPartitionDiscoveryProvider
 

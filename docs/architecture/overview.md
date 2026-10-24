@@ -65,8 +65,11 @@ flowchart TD
 ## 2. Componentes Principais
 
 ### A. Camada de Orquestração (`orchestrator/cnpydge/`)
-- **`crawler.py`:** Cliente HTTP para o repositório WebDAV da Receita Federal via `PROPFIND`, cataloga arquivos disponíveis e extrai metadados (`Content-Length`, `Last-Modified`).
-- **`downloader.py`:** Executa downloads atômicos e concorrentes via `httpx.Client`, gerenciando arquivos parciais `.part` e implementando retentativas com cabeçalho `Range`.
+- **`__main__.py`:** Ponto de entrada executável para automação em terminal (`python -m cnpydge`) e contêineres Docker.
+- **`api/`:** Contratos de API pública e pontos de entrada (`converter.py` com `to_parquet` e `run_pipeline`).
+- **`network/`:** Isolamento de transporte HTTP, descoberta WebDAV (`crawler.py`) e download streaming concorrente (`downloader.py`).
+- **`catalog/`:** Manifesto de entrega e catálogo formal de datasets (`catalog.json`).
+- **`crawler.py` & `downloader.py`:** Módulos de compatibilidade retroativa re-exportando de `network/`.
 - **`pipeline/`:** Módulo de esteira integrada com arquitetura limpa e inversão de dependência (SOLID):
   - `rfb_pipeline_orchestrator.py`: Coordena a esteira unitária sequencial delegando a descoberta para `PartitionDiscoveryProvider` (DIP/LSP).
   - `webdav_partition_discovery.py`: Implementação concreta `WebDavPartitionDiscoveryProvider` para catálogo WebDAV remoto.

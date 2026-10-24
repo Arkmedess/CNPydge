@@ -1,6 +1,6 @@
 """Modelos e enums de domínio declarativos para o pipeline de dados da RFB."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
@@ -44,27 +44,25 @@ class PartitionProcessingRecord:
     error_message: str | None = None
 
 
+_DEFAULT_RFB_PREFIX_MAP: dict[str, str] = {
+    "empresa": "empresas",
+    "estabele": "estabelecimentos",
+    "socio": "socios",
+    "simples": "simples",
+    "cnae": "cnaes",
+    "motivo": "motivos",
+    "municipio": "municipios",
+    "natureza": "naturezas",
+    "pais": "paises",
+    "qualifica": "qualificacoes",
+}
+
+
 @dataclass(frozen=True, slots=True)
 class RfbTableRegistry:
     """Catálogo canônico e regras de inferência de tabelas públicas da Receita Federal."""
 
-    prefix_map: dict[str, str] = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.prefix_map is None:
-            default_map: dict[str, str] = {
-                "empresa": "empresas",
-                "estabele": "estabelecimentos",
-                "socio": "socios",
-                "simples": "simples",
-                "cnae": "cnaes",
-                "motivo": "motivos",
-                "municipio": "municipios",
-                "natureza": "naturezas",
-                "pais": "paises",
-                "qualifica": "qualificacoes",
-            }
-            object.__setattr__(self, "prefix_map", default_map)
+    prefix_map: dict[str, str] = field(default_factory=lambda: dict(_DEFAULT_RFB_PREFIX_MAP))
 
     def infer_table_kind(self, filename: str) -> str | None:
         """Infere o identificador canônico da tabela a partir do nome do arquivo.
